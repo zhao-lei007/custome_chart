@@ -71,3 +71,14 @@ export default defineConfig([
   },
 ])
 ```
+## how to use it
+
+# 构建项目
+npm --prefix custom-charts run build
+
+# 启动静态服务器
+python3 -m http.server 8080 --bind 0.0.0.0
+
+# 访问应用
+# 本机：http://127.0.0.1:8080/index.html
+# 局域网：http://你的IP:8080/index.html
