@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>自定义图表 - 创建/编辑</title>
+  <style>
+    :root { --border:#E5E5E5; --bg:#FAFAFA; --primary:#3772FF; --text:#333; --muted:#666; }
+    body { margin:0; font:14px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial; color:var(--text); }
+    .toolbar { display:flex; gap:8px; padding:8px 12px; border-bottom:1px solid var(--border); background:#fff; align-items:center; }
+    .btn { padding:6px 12px; border:1px solid var(--border); border-radius:4px; background:#fff; cursor:pointer; }
+    .btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+    .layout { display:grid; grid-template-columns: 280px 1fr 260px; gap:12px; padding:12px; }
+    .panel { background:#fff; border:1px solid var(--border); border-radius:6px; }
+    .panel h3 { margin:0; padding:10px 12px; border-bottom:1px solid var(--border); font-size:14px; }
+    .panel .content { padding:10px 12px; }
+    .field { padding:6px 8px; border:1px solid var(--border); border-radius:4px; margin-bottom:6px; cursor:pointer; }
+    .field:hover { background:#f7f7f7; }
+    .pill { display:inline-block; padding:4px 8px; border:1px solid var(--border); border-radius:12px; margin:4px; }
+    .row { display:flex; gap:8px; align-items:center; }
+    #preview { height: 420px; background:#fff; border:1px solid var(--border); border-radius:6px; }
+    input, select { padding:6px 8px; border:1px solid var(--border); border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button class="btn" id="undoBtn">撤销</button>
+    <button class="btn" id="redoBtn">重做</button>
+    <div style="flex:1"></div>
+    <input id="chartName" placeholder="输入图表名称..." />
+    <button class="btn primary" id="saveBtn">保存</button>
+  </div>
+  <div class="layout">
+    <div class="panel">
+      <h3>数据集与字段</h3>
+      <div class="content">
+        <div class="row"><strong>数据集：</strong><select id="datasetSel"></select></div>
+        <h4>维度</h4>
+        <div id="dims"></div>
+        <h4>指标</h4>
+        <div id="mets"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>图表配置与预览</h3>
+      <div class="content">
+        <div class="row">
+          <label>图表类型：</label>
+          <select id="chartType">
+            <option value="bar">bar</option>
+            <option value="line">line</option>
+            <option value="pie">pie</option>
+            <option value="table">table</option>
+          </select>
+        </div>
+        <div id="preview" style="margin-top:10px;"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>查询构建器</h3>
+      <div class="content">
+        <div>
+          <div><strong>维度</strong></div>
+          <div id="pickedDims"></div>
+        </div>
+        <div style="margin-top:8px;">
+          <div><strong>指标</strong></div>
+          <div id="pickedMets"></div>
+        </div>
+        <div style="margin-top:8px;">
+          <div class="row"><label>发布状态：</label><select id="pub"><option value="draft">draft</option><option value="published">published</option></select></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { ensureInit, STORAGE_KEYS, storage, DIMENSION_FIELDS, METRIC_FIELDS, getDatasetById, runLocalQuery, saveChart, getCharts, uid } from './shared.js';
+    ensureInit();
+
+    // libs
+    import * as echarts from 'https://esm.sh/echarts@5';
+
+    // state
+    const state = {
+      id: null,
+      name: '',
+      dataset: 'ads_basic',
+      dims: [],
+      mets: [],
+      chartType: 'bar',
+      publishStatus: 'draft',
+    };
+
+    // dom refs
+    const datasetSel = document.getElementById('datasetSel');
+    const dimsDiv = document.getElementById('dims');
+    const metsDiv = document.getElementById('mets');
+    const pDims = document.getElementById('pickedDims');
+    const pMets = document.getElementById('pickedMets');
+    const chartTypeSel = document.getElementById('chartType');
+    const pubSel = document.getElementById('pub');
+    const nameInp = document.getElementById('chartName');
+    const previewEl = document.getElementById('preview');
+
+    // init dataset options
+    (function initDatasets(){
+      const dss = storage.load(STORAGE_KEYS.DATASETS, []);
+      dss.forEach(ds=>{
+        const opt = document.createElement('option');
+        opt.value = ds.id; opt.textContent = ds.name;
+        datasetSel.appendChild(opt);
+      });
+      datasetSel.value = state.dataset;
+    })();
+
+    function renderFields(){
+      dimsDiv.innerHTML='';
+      metsDiv.innerHTML='';
+      DIMENSION_FIELDS.forEach(f=>{
+        const el = document.createElement('div'); el.className='field'; el.textContent = `${f.name} (${f.id})`;
+        el.onclick = ()=>{ if(!state.dims.find(x=>x.field.id===f.id)){ state.dims=[{field:f}]; drawPicked(); drawPreview(); } };
+        dimsDiv.appendChild(el);
+      });
+      METRIC_FIELDS.forEach(f=>{
+        const el = document.createElement('div'); el.className='field'; el.textContent = `${f.name} (${f.id})`;
+        el.onclick = ()=>{ if(!state.mets.find(x=>x.field.id===f.id)){ state.mets=[{field:f, aggregation:f.aggregation||'sum'}]; drawPicked(); drawPreview(); } };
+        metsDiv.appendChild(el);
+      });
+    }
+
+    function pill(label, onRemove){
+      const span = document.createElement('span'); span.className='pill'; span.textContent = label;
+      const x = document.createElement('button'); x.className='btn'; x.textContent='×'; x.style.marginLeft='6px'; x.onclick = onRemove;
+      span.appendChild(x); return span;
+    }
+
+    function drawPicked(){
+      pDims.innerHTML='';
+      pMets.innerHTML='';
+      state.dims.forEach(d=> pDims.appendChild(pill(d.field.name, ()=>{ state.dims=[]; drawPicked(); drawPreview(); }))); // single dim for MVP
+      state.mets.forEach(m=> pMets.appendChild(pill(m.field.name, ()=>{ state.mets=[]; drawPicked(); drawPreview(); }))); // single metric for MVP
+    }
+
+    let chart;
+    function drawPreview(){
+      if(!chart) chart = echarts.init(previewEl);
+      if(state.chartType==='table'){
+        const ds = getDatasetById(state.dataset);
+        previewEl.innerHTML = `<pre style="padding:8px; overflow:auto;">${JSON.stringify(ds?.rows||[], null, 2)}</pre>`;
+        return;
+      }
+      const points = runLocalQuery({ dataset: state.dataset, dimensions: state.dims, metrics: state.mets });
+      const option = (function(){
+        const names = points.map(p=>p.name);
+        const values = points.map(p=>p.value);
+        if(state.chartType==='pie'){
+          return { tooltip:{}, series:[{ type:'pie', radius:'60%', data:points }] };
+        }
+        const seriesType = state.chartType==='line'?'line':'bar';
+        return { tooltip:{}, xAxis:{ type:'category', data:names }, yAxis:{ type:'value' }, series:[{ type:seriesType, data:values }] };
+      })();
+      chart.setOption(option, true);
+    }
+
+    function loadIfEdit(){
+      const params = new URLSearchParams(location.search);
+      const id = params.get('id');
+      if(!id) return;
+      const chart = (getCharts()||[]).find(c=>c.id===id);
+      if(!chart) return;
+      state.id = chart.id;
+      state.name = chart.name||'';
+      nameInp.value = state.name;
+      state.dataset = chart.query?.dataset || 'ads_basic'; datasetSel.value = state.dataset;
+      state.chartType = chart.chartType||'bar'; chartTypeSel.value = state.chartType;
+      state.publishStatus = chart.publishStatus||'draft'; pubSel.value = state.publishStatus;
+      state.dims = chart.query?.dimensions||[];
+      state.mets = chart.query?.metrics||[];
+      drawPicked();
+    }
+
+    // events
+    datasetSel.onchange = ()=>{ state.dataset = datasetSel.value; drawPreview(); };
+    chartTypeSel.onchange = ()=>{ state.chartType = chartTypeSel.value; drawPreview(); };
+    pubSel.onchange = ()=>{ state.publishStatus = pubSel.value; };
+    document.getElementById('saveBtn').onclick = ()=>{
+      state.name = nameInp.value || '未命名图表';
+      if(!state.dims.length || !state.mets.length){ alert('请至少选择一个维度和一个指标'); return; }
+      // render once to get preview image
+      drawPreview();
+      let previewImage = null;
+      try { previewImage = chart?.getDataURL?.({ pixelRatio:2, backgroundColor:'#fff' }) || null; } catch(e){}
+      const now = new Date().toISOString();
+      const chartObj = {
+        id: state.id || uid('chart'),
+        name: state.name,
+        creator: '本机用户',
+        createdAt: state.id ? undefined : now,
+        updatedAt: now,
+        dataSource: state.dataset,
+        publishStatus: state.publishStatus,
+        chartType: state.chartType,
+        tags: [],
+        order: Date.now(),
+        query: { dataset: state.dataset, dimensions: state.dims, metrics: state.mets, filters: [], config: {} },
+        config: {},
+        previewImage,
+      };
+      if(!chartObj.createdAt){
+        const old = (getCharts()||[]).find(c=>c.id===chartObj.id);
+        chartObj.createdAt = old?.createdAt || now;
+      }
+      saveChart(chartObj);
+      alert('已保存');
+    };
+
+    document.getElementById('undoBtn').onclick = ()=> alert('MVP 暂未实现撤销/重做');
+    document.getElementById('redoBtn').onclick = ()=> alert('MVP 暂未实现撤销/重做');
+
+    // init
+    renderFields();
+    loadIfEdit();
+    drawPreview();
+  </script>
+</body>
+</html>
+

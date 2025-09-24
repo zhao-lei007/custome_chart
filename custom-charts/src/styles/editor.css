@@ -1,0 +1,16 @@
+:root{ --border:#E5E5E5; --bg:#FAFAFA; --primary:#3772FF; --text:#333; --muted:#666 }
+body{ margin:0; font:14px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial; color:var(--text) }
+.toolbar{ display:flex; gap:8px; padding:8px 12px; border-bottom:1px solid var(--border); background:#fff; align-items:center }
+.btn{ padding:6px 12px; border:1px solid var(--border); border-radius:4px; background:#fff; cursor:pointer }
+.btn.primary{ background:var(--primary); color:#fff; border-color:var(--primary) }
+.layout{ display:grid; grid-template-columns: 280px 1fr 260px; gap:12px; padding:12px }
+.panel{ background:#fff; border:1px solid var(--border); border-radius:6px }
+.panel h3{ margin:0; padding:10px 12px; border-bottom:1px solid var(--border); font-size:14px }
+.panel .content{ padding:10px 12px }
+.field{ padding:6px 8px; border:1px solid var(--border); border-radius:4px; margin-bottom:6px; cursor:pointer }
+.field:hover{ background:#f7f7f7 }
+.pill{ display:inline-block; padding:4px 8px; border:1px solid var(--border); border-radius:12px; margin:4px }
+.row{ display:flex; gap:8px; align-items:center }
+#preview{ height:420px; background:#fff; border:1px solid var(--border); border-radius:6px }
+input,select{ padding:6px 8px; border:1px solid var(--border); border-radius:4px }
+

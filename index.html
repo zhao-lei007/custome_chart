@@ -58,7 +58,7 @@
     <meta name="referrer" content="same-origin">
     <!-- Removed external favicon to keep file self-contained. -->
     <!-- <link rel="shortcut icon" href="./assets/4.0-logo_aHR0cHM6.ico"> -->
-    
+
 <script>(() => {
   try {
     if (navigator.serviceWorker) { navigator.serviceWorker.register = () => Promise.resolve({ unregister(){} }); }
@@ -80,9 +80,9 @@
 })();</script>
 <script>
       window.DE_VERSION = '4.0';
-      
+
       try {
-        if (self.location.host != top.location.host 
+        if (self.location.host != top.location.host
           || (self !== top && (!top.DE_VERSION || top.DE_VERSION < '3.0'))) {
           // 防止2.0页面嵌入4.0页面
           top.location = self.location;
@@ -90,7 +90,7 @@
       } catch(e) {
         // pass
       }
-      
+
 
       function forceReload() {
         // 刷新页面，用localStorage记录刷新了多少次，如果刷新一次后还是报错则不继续刷新，以免页面一直刷新
@@ -24803,6 +24803,248 @@ textarea.de-ant-input-number {
         }
       }
     </script>
-  
 
-</body></html>
+  </body></html>
+
+
+<script>
+// === Custom Charts embedding into central content area ===
+(function(){
+  let isInitialized = false;
+
+  function findContentArea(){
+    // Try to find the main content area more precisely
+    const candidates = [
+      '.de-ant-layout-content',
+      '[class*="content"]',
+      '[class*="Content"]',
+      '.main-content',
+      '#main-content',
+      '.content-area',
+      '.layout-content'
+    ];
+
+    for(const selector of candidates){
+      const el = document.querySelector(selector);
+      if(el && el.offsetWidth > 200 && el.offsetHeight > 200){
+        return el;
+      }
+    }
+
+    // Fallback: find the largest content-like element
+    const allDivs = document.querySelectorAll('div');
+    let bestCandidate = null;
+    let maxArea = 0;
+
+    for(const div of allDivs){
+      const rect = div.getBoundingClientRect();
+      const area = rect.width * rect.height;
+      if(area > maxArea && rect.width > 300 && rect.height > 200){
+        // Skip if it's likely a container for the whole page
+        if(rect.width < window.innerWidth * 0.95){
+          bestCandidate = div;
+          maxArea = area;
+        }
+      }
+    }
+
+    return bestCandidate;
+  }
+
+  function computeContentRect(){
+    const contentArea = findContentArea();
+    if(contentArea){
+      const rect = contentArea.getBoundingClientRect();
+      return {
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height
+      };
+    }
+
+    // Fallback calculation
+    const leftEl = document.querySelector('.components-LeftMenu-index-module__leftMenu, [class*="leftMenu"], [class*="sider"], .ant-layout-sider');
+    const headerEl = document.querySelector('.de-ant-layout-header, header, [class*="Header"], .ant-layout-header');
+    const left = leftEl ? leftEl.getBoundingClientRect().right : 200;
+    const top = headerEl ? headerEl.getBoundingClientRect().bottom : 64;
+    const width = Math.max(300, window.innerWidth - left - 20);
+    const height = Math.max(200, window.innerHeight - top - 20);
+    return { left, top, width, height };
+  }
+
+  function createEmbeddedContainer(){
+    let wrap = document.getElementById('customChartsEmbedded');
+    if(!wrap){
+      wrap = document.createElement('div');
+      wrap.id = 'customChartsEmbedded';
+      wrap.style.cssText = `
+        position: fixed;
+        background: #fff;
+        border: 1px solid #e5e5e5;
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        z-index: 1000;
+        overflow: hidden;
+      `;
+
+      const iframe = document.createElement('iframe');
+      iframe.id = 'customChartsFrame';
+      iframe.style.cssText = `
+        width: 100%;
+        height: 100%;
+        border: 0;
+        display: block;
+      `;
+      iframe.setAttribute('referrerpolicy','no-referrer');
+      iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-modals');
+
+      wrap.appendChild(iframe);
+      document.body.appendChild(wrap);
+
+      window.addEventListener('resize', layoutContainer);
+    }
+    layoutContainer();
+    return wrap;
+  }
+
+  function layoutContainer(){
+    const r = computeContentRect();
+    const wrap = document.getElementById('customChartsEmbedded');
+    if(wrap){
+      wrap.style.left = r.left + 'px';
+      wrap.style.top = r.top + 'px';
+      wrap.style.width = r.width + 'px';
+      wrap.style.height = r.height + 'px';
+    }
+  }
+
+  function getBasePath(){
+    if(window.CUSTOM_CHARTS_BASE) return window.CUSTOM_CHARTS_BASE;
+
+    // Check if built version exists
+    const testPaths = ['custom-charts/dist/manage.html', 'custom-charts-static/manage.html'];
+    for(const path of testPaths){
+      try {
+        // We'll assume dist version exists if we built it
+        if(path.includes('dist')){
+          return (window.CUSTOM_CHARTS_BASE = 'custom-charts/dist');
+        }
+      } catch(e) {}
+    }
+
+    return (window.CUSTOM_CHARTS_BASE = 'custom-charts-static');
+  }
+
+  function openCustomCharts(which, options = {}){
+    const wrap = createEmbeddedContainer();
+    const iframe = document.getElementById('customChartsFrame');
+    if(!iframe) return;
+
+    const basePath = getBasePath();
+    let url = which === 'editor' ? `./${basePath}/editor.html` : `./${basePath}/manage.html`;
+
+    // Add chart ID to URL if provided
+    if(options.chartId){
+      url += `?id=${encodeURIComponent(options.chartId)}`;
+    }
+
+    console.log('Loading custom charts:', url);
+    iframe.src = url;
+    wrap.style.display = 'block';
+
+    // Handle iframe load and send additional data if needed
+    iframe.onload = function(){
+      console.log('Custom charts loaded successfully');
+      // Send chart ID via postMessage if provided (backup method)
+      if(options.chartId && which === 'editor'){
+        setTimeout(() => {
+          iframe.contentWindow?.postMessage({
+            type: 'LOAD_CHART',
+            chartId: options.chartId
+          }, '*');
+        }, 100);
+      }
+    };
+    iframe.onerror = function(){
+      console.error('Failed to load custom charts');
+    };
+  }
+
+  function initMenuBinding(){
+    const menu = document.querySelector('.components-LeftMenu-index-module__leftMenu, [class*="leftMenu"], .ant-menu');
+    if(!menu) return false;
+
+    const menuItems = menu.querySelectorAll('li, .ant-menu-item');
+    for(const li of menuItems){
+      const text = (li.textContent || '').trim();
+      if(text === '自定义图表'){
+        li.style.cursor = 'pointer';
+        li.addEventListener('click', function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          openCustomCharts('manage');
+        });
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function initialize(){
+    if(isInitialized) return;
+
+    console.log('Initializing custom charts integration...');
+
+    // Try to bind menu immediately
+    if(initMenuBinding()){
+      console.log('Menu binding successful');
+    } else {
+      console.log('Menu not found, will retry...');
+      // Retry menu binding periodically
+      let retryCount = 0;
+      const retryInterval = setInterval(() => {
+        if(initMenuBinding() || retryCount++ > 20){
+          clearInterval(retryInterval);
+          if(retryCount > 20) console.warn('Menu binding failed after retries');
+        }
+      }, 500);
+    }
+
+    // Load management page by default after a short delay
+    setTimeout(() => {
+      console.log('Loading default management page...');
+      openCustomCharts('manage');
+    }, 1000);
+
+    isInitialized = true;
+  }
+
+  // Handle messages from iframe
+  window.addEventListener('message', function(ev){
+    if(!ev || !ev.data) return;
+    if(ev.data.type === 'OPEN_CUSTOM_CHARTS'){
+      const options = {};
+      if(ev.data.chartId){
+        options.chartId = ev.data.chartId;
+      }
+      openCustomCharts(ev.data.which || 'manage', options);
+    }
+  });
+
+  // Expose for console debugging
+  window.openCustomCharts = openCustomCharts;
+  window.debugCustomCharts = function(){
+    console.log('Content area:', findContentArea());
+    console.log('Content rect:', computeContentRect());
+    console.log('Base path:', getBasePath());
+  };
+
+  // Initialize when DOM is ready
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initialize);
+  } else {
+    setTimeout(initialize, 100);
+  }
+})();
+</script>

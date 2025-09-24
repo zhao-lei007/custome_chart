@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Custom Charts Integration Test</title>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; }
+        .header { height: 64px; background: #001529; color: white; display: flex; align-items: center; padding: 0 20px; }
+        .layout { display: flex; height: calc(100vh - 64px); }
+        .sidebar { width: 200px; background: #f0f2f5; padding: 20px 0; }
+        .menu-item { padding: 12px 20px; cursor: pointer; border-bottom: 1px solid #e5e5e5; }
+        .menu-item:hover { background: #e6f7ff; }
+        .menu-item.active { background: #1890ff; color: white; }
+        .content { flex: 1; background: #fff; position: relative; }
+        .debug-info { position: fixed; top: 70px; right: 10px; background: rgba(0,0,0,0.8); color: white; padding: 10px; border-radius: 4px; font-size: 12px; z-index: 9999; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>DataEase Custom Charts Test</h2>
+    </div>
+    
+    <div class="layout">
+        <div class="sidebar">
+            <div class="menu-item" onclick="loadDashboard()">仪表板</div>
+            <div class="menu-item active" onclick="loadCustomCharts()">自定义图表</div>
+            <div class="menu-item" onclick="loadDatasets()">数据集</div>
+            <div class="menu-item" onclick="loadSettings()">设置</div>
+        </div>
+        
+        <div class="content" id="mainContent">
+            <div style="padding: 20px; color: #666;">
+                <h3>正在加载自定义图表管理页面...</h3>
+                <p>如果页面没有自动加载，请点击左侧"自定义图表"菜单项。</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="debug-info" id="debugInfo">
+        <div>状态: 初始化中...</div>
+        <div>内容区域: 计算中...</div>
+        <div>iframe: 未创建</div>
+    </div>
+
+    <script>
+        let debugInfo = document.getElementById('debugInfo');
+        let isCustomChartsLoaded = false;
+
+        function updateDebug(status, contentRect, iframeStatus) {
+            debugInfo.innerHTML = `
+                <div>状态: ${status}</div>
+                <div>内容区域: ${contentRect ? `${contentRect.width}x${contentRect.height} at (${contentRect.left},${contentRect.top})` : '未计算'}</div>
+                <div>iframe: ${iframeStatus}</div>
+            `;
+        }
+
+        function computeContentRect() {
+            const content = document.getElementById('mainContent');
+            if (content) {
+                const rect = content.getBoundingClientRect();
+                return {
+                    left: rect.left,
+                    top: rect.top,
+                    width: rect.width,
+                    height: rect.height
+                };
+            }
+            return null;
+        }
+
+        function createCustomChartsIframe() {
+            let iframe = document.getElementById('customChartsFrame');
+            if (!iframe) {
+                const content = document.getElementById('mainContent');
+                content.innerHTML = '';
+                
+                iframe = document.createElement('iframe');
+                iframe.id = 'customChartsFrame';
+                iframe.style.cssText = `
+                    width: 100%;
+                    height: 100%;
+                    border: 0;
+                    display: block;
+                `;
+                iframe.setAttribute('referrerpolicy', 'no-referrer');
+                iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms');
+                
+                content.appendChild(iframe);
+                
+                iframe.onload = function() {
+                    updateDebug('iframe已加载', computeContentRect(), '已加载');
+                };
+                iframe.onerror = function() {
+                    updateDebug('iframe加载失败', computeContentRect(), '加载失败');
+                };
+            }
+            return iframe;
+        }
+
+        function loadCustomCharts(which = 'manage') {
+            const iframe = createCustomChartsIframe();
+            const url = which === 'editor' ? './custom-charts/dist/editor.html' : './custom-charts/dist/manage.html';
+            
+            updateDebug(`正在加载${which}页面`, computeContentRect(), '加载中...');
+            iframe.src = url;
+            isCustomChartsLoaded = true;
+            
+            // Update menu active state
+            document.querySelectorAll('.menu-item').forEach(item => item.classList.remove('active'));
+            event?.target?.classList.add('active');
+        }
+
+        function loadDashboard() {
+            document.getElementById('mainContent').innerHTML = '<div style="padding: 20px;"><h3>仪表板页面</h3><p>这里是仪表板内容...</p></div>';
+            updateDebug('仪表板页面', computeContentRect(), '无iframe');
+            isCustomChartsLoaded = false;
+        }
+
+        function loadDatasets() {
+            document.getElementById('mainContent').innerHTML = '<div style="padding: 20px;"><h3>数据集页面</h3><p>这里是数据集内容...</p></div>';
+            updateDebug('数据集页面', computeContentRect(), '无iframe');
+            isCustomChartsLoaded = false;
+        }
+
+        function loadSettings() {
+            document.getElementById('mainContent').innerHTML = '<div style="padding: 20px;"><h3>设置页面</h3><p>这里是设置内容...</p></div>';
+            updateDebug('设置页面', computeContentRect(), '无iframe');
+            isCustomChartsLoaded = false;
+        }
+
+        // Handle messages from iframe
+        window.addEventListener('message', function(ev) {
+            if (!ev || !ev.data) return;
+            if (ev.data.type === 'OPEN_CUSTOM_CHARTS') {
+                const options = {};
+                if (ev.data.chartId) {
+                    options.chartId = ev.data.chartId;
+                }
+                loadCustomCharts(ev.data.which || 'manage');
+                
+                // If opening editor with chart ID, send it to iframe after load
+                if (ev.data.which === 'editor' && ev.data.chartId) {
+                    setTimeout(() => {
+                        const iframe = document.getElementById('customChartsFrame');
+                        if (iframe && iframe.contentWindow) {
+                            iframe.contentWindow.postMessage({
+                                type: 'LOAD_CHART',
+                                chartId: ev.data.chartId
+                            }, '*');
+                        }
+                    }, 500);
+                }
+            }
+        });
+
+        // Auto-load custom charts on page load
+        window.addEventListener('load', function() {
+            setTimeout(() => {
+                updateDebug('页面已加载，准备加载自定义图表', computeContentRect(), '准备中...');
+                loadCustomCharts('manage');
+            }, 500);
+        });
+
+        // Expose for console debugging
+        window.testLoadCustomCharts = loadCustomCharts;
+        window.testComputeRect = computeContentRect;
+    </script>
+</body>
+</html>

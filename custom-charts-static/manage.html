@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>自定义图表 - 管理</title>
+  <style>
+    :root { --primary:#3772FF; --border:#E5E5E5; --bg:#FAFAFA; --text:#333; --muted:#666; }
+    body { margin:0; font:14px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial; color:var(--text); }
+    .topbar { display:flex; gap:12px; padding:12px 16px; border-bottom:1px solid var(--border); background:#fff; position:sticky; top:0; }
+    .btn { padding:6px 12px; border:1px solid var(--border); border-radius:4px; background:#fff; cursor:pointer; }
+    .btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
+    .search { flex:1; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap:16px; padding:16px; }
+    .card { background:#fff; border:1px solid var(--border); border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,.05); padding:12px; display:flex; flex-direction:column; gap:8px; }
+    .row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+    .meta { font-size:12px; color:var(--muted); }
+    .tags { display:flex; gap:6px; flex-wrap:wrap; }
+    .tag { font-size:12px; padding:2px 6px; background:#f3f4f6; border:1px solid var(--border); border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script type="module">
+    import React, { useEffect, useMemo, useState } from 'https://esm.sh/react@18';
+    import { createRoot } from 'https://esm.sh/react-dom@18/client';
+    import { ensureInit, STORAGE_KEYS, storage, getCharts, uid } from './shared.js';
+
+    ensureInit();
+
+    function fmtDate(s){ try{ return new Date(s).toLocaleString(); }catch(e){ return s||''; } }
+
+    function App(){
+      const [q, setQ] = useState('');
+      const [charts, setCharts] = useState([]);
+      const [type, setType] = useState('');
+      const [pub, setPub] = useState('');
+      const [source, setSource] = useState('');
+      const [sortBy, setSortBy] = useState('updatedAt');
+
+      useEffect(()=>{ setCharts(getCharts()); },[]);
+
+      const filtered = useMemo(()=>{
+        return [...charts]
+          .filter(c => !q || (c.name||'').toLowerCase().includes(q.toLowerCase()))
+          .filter(c => !type || c.chartType===type)
+          .filter(c => !pub || c.publishStatus===pub)
+          .filter(c => !source || c.dataSource===source)
+          .sort((a,b)=> (b[sortBy]||'').localeCompare(a[sortBy]||''));
+      },[charts,q,type,pub,source,sortBy]);
+
+      function remove(id){
+        if(!confirm('确认删除该图表吗？')) return;
+        const next = storage.removeFromListById(STORAGE_KEYS.CHARTS, id);
+        setCharts(next);
+      }
+
+      function addTag(c){
+        const t = prompt('新标签');
+        if(!t) return;
+        c.tags = Array.from(new Set([...(c.tags||[]), t]));
+        storage.upsertInListById(STORAGE_KEYS.CHARTS, c);
+        setCharts(getCharts());
+      }
+
+      function editTags(c){
+        const t = prompt('用逗号分隔标签', (c.tags||[]).join(','));
+        if(t==null) return;
+        c.tags = t.split(',').map(s=>s.trim()).filter(Boolean);
+        storage.upsertInListById(STORAGE_KEYS.CHARTS, c);
+        setCharts(getCharts());
+      }
+
+      return (
+        React.createElement('div', null,
+          React.createElement('div', {className:'topbar'},
+            React.createElement('button', {className:'btn primary', onClick:()=> window.open('./editor.html','_blank')}, '创建图表'),
+            React.createElement('input', {className:'search', placeholder:'搜索图表名称...', value:q, onChange:e=>setQ(e.target.value)}),
+            React.createElement('select', {className:'btn', value:type, onChange:e=>setType(e.target.value)},
+              React.createElement('option',{value:''},'图表类型'),
+              ['table','bar','line','pie','scatter','heatmap','area','radar'].map(t=>React.createElement('option',{key:t,value:t},t))
+            ),
+            React.createElement('select', {className:'btn', value:pub, onChange:e=>setPub(e.target.value)},
+              React.createElement('option',{value:''},'发布状态'),
+              ['draft','published'].map(t=>React.createElement('option',{key:t,value:t},t))
+            ),
+            React.createElement('select', {className:'btn', value:sortBy, onChange:e=>setSortBy(e.target.value)},
+              React.createElement('option',{value:'updatedAt'},'按修改时间'),
+              React.createElement('option',{value:'createdAt'},'按创建时间')
+            )
+          ),
+          React.createElement('div', {className:'grid'},
+            filtered.map(c=> React.createElement('div', {key:c.id,className:'card'},
+              React.createElement('div', {className:'row'},
+                React.createElement('strong', null, c.name||'(未命名)'),
+                React.createElement('div', null,
+                  React.createElement('button',{className:'btn', onClick:()=> window.open(`./editor.html?id=${c.id}`,'_blank')}, '修改'),
+                  ' ',
+                  React.createElement('button',{className:'btn', onClick:()=> remove(c.id)}, '删除')
+                )
+              ),
+              React.createElement('div', {className:'meta'}, `创建人：${c.creator||'-'}`),
+              React.createElement('div', {className:'meta'}, `创建时间：${fmtDate(c.createdAt)}`),
+              React.createElement('div', {className:'meta'}, `修改时间：${fmtDate(c.updatedAt)}`),
+              React.createElement('div', {className:'meta'}, `数据来源：${c.dataSource||'ads_basic'}`),
+              React.createElement('div', {className:'meta'}, `发布状态：${c.publishStatus||'draft'}`),
+              React.createElement('div', {className:'meta'}, `图表类型：${c.chartType||'bar'}`),
+              React.createElement('div', {className:'tags'},
+                ...(c.tags||[]).map(t=>React.createElement('span',{className:'tag',key:t},t)),
+                React.createElement('button', {className:'btn', onClick:()=>addTag(c)}, '+标签'),
+                React.createElement('button', {className:'btn', onClick:()=>editTags(c)}, '编辑标签')
+              )
+            ))
+          )
+        )
+      );
+    }
+
+    createRoot(document.getElementById('app')).render(React.createElement(App));
+  </script>
+</body>
+</html>
+
