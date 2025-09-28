@@ -10,7 +10,10 @@
     .toolbar { display:flex; gap:8px; padding:8px 12px; border-bottom:1px solid var(--border); background:#fff; align-items:center; }
     .btn { padding:6px 12px; border:1px solid var(--border); border-radius:4px; background:#fff; cursor:pointer; }
     .btn.primary { background:var(--primary); color:#fff; border-color:var(--primary); }
-    .layout { display:grid; grid-template-columns: 280px 1fr 260px; gap:12px; padding:12px; }
+    .layout { display:grid; grid-template-columns: 280px 1fr; gap:12px; padding:12px; }
+    .config-preview { display:flex; flex-direction:column; min-height:540px; }
+    .config-preview__top { flex:1 1 0; overflow:auto; padding-bottom:8px; border-bottom:1px solid var(--border); }
+    .config-preview__bottom { flex:9 1 0; overflow:auto; padding-top:8px; }
     .panel { background:#fff; border:1px solid var(--border); border-radius:6px; }
     .panel h3 { margin:0; padding:10px 12px; border-bottom:1px solid var(--border); font-size:14px; }
     .panel .content { padding:10px 12px; }
@@ -42,34 +45,33 @@
       </div>
     </div>
     <div class="panel">
-      <h3>图表配置与预览</h3>
-      <div class="content">
-        <div class="row">
-          <label>图表类型：</label>
-          <select id="chartType">
-            <option value="bar">bar</option>
-            <option value="line">line</option>
-            <option value="pie">pie</option>
-            <option value="table">table</option>
-          </select>
-        </div>
-        <div id="preview" style="margin-top:10px;"></div>
-      </div>
-    </div>
-    <div class="panel">
-      <h3>查询构建器</h3>
-      <div class="content">
-        <div>
-          <div><strong>维度</strong></div>
-          <div id="pickedDims"></div>
-        </div>
-        <div style="margin-top:8px;">
-          <div><strong>指标</strong></div>
-          <div id="pickedMets"></div>
-        </div>
-        <div style="margin-top:8px;">
-          <div class="row"><label>发布状态：</label><select id="pub"><option value="draft">draft</option><option value="published">published</option></select></div>
-        </div>
+      <h3>配置预览</h3>
+      <div class="content config-preview">
+        <section class="config-preview__top">
+          <div>
+            <div><strong>维度</strong></div>
+            <div id="pickedDims"></div>
+          </div>
+          <div style="margin-top:8px;">
+            <div><strong>指标</strong></div>
+            <div id="pickedMets"></div>
+          </div>
+          <div style="margin-top:8px;">
+            <div class="row"><label>发布状态：</label><select id="pub"><option value="draft">draft</option><option value="published">published</option></select></div>
+          </div>
+        </section>
+        <section class="config-preview__bottom">
+          <div class="row">
+            <label>图表类型：</label>
+            <select id="chartType">
+              <option value="bar">bar</option>
+              <option value="line">line</option>
+              <option value="pie">pie</option>
+              <option value="table">table</option>
+            </select>
+          </div>
+          <div id="preview" style="margin-top:10px;"></div>
+        </section>
       </div>
     </div>
   </div>

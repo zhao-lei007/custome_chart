@@ -125,40 +125,39 @@ function App(){
           </div>
         </div>
         <div className='panel'>
-          <h3>图表配置与预览</h3>
-          <div className='content'>
-            <div className='row'>
-              <label>图表类型：</label>
-              <select value={chartType} onChange={e=>setChartType(e.target.value as any)}>
-                {['bar','line','pie','table'].map(t=> <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div ref={pvRef} id='preview' style={{marginTop:10}} />
-          </div>
-        </div>
-        <div className='panel'>
-          <h3>查询构建器</h3>
-          <div className='content'>
-            <div>
-              <div><strong>维度</strong></div>
-              <div id='pickedDims'>
-                {dims.map(d=> <span key={d.field.id} className='pill'>{d.field.name}<button className='btn' onClick={removeDim}>×</button></span>)}
+          <h3>配置预览</h3>
+          <div className='content config-preview'>
+            <section className='config-preview__top'>
+              <div>
+                <div><strong>维度</strong></div>
+                <div id='pickedDims'>
+                  {dims.map(d=> <span key={d.field.id} className='pill'>{d.field.name}<button className='btn' onClick={removeDim}>×</button></span>)}
+                </div>
               </div>
-            </div>
-            <div style={{marginTop:8}}>
-              <div><strong>指标</strong></div>
-              <div id='pickedMets'>
-                {mets.map(m=> <span key={m.field.id} className='pill'>{m.field.name}<button className='btn' onClick={removeMet}>×</button></span>)}
+              <div style={{marginTop:8}}>
+                <div><strong>指标</strong></div>
+                <div id='pickedMets'>
+                  {mets.map(m=> <span key={m.field.id} className='pill'>{m.field.name}<button className='btn' onClick={removeMet}>×</button></span>)}
+                </div>
               </div>
-            </div>
-            <div style={{marginTop:8}}>
+              <div style={{marginTop:8}}>
+                <div className='row'>
+                  <label>发布状态：</label>
+                  <select value={publishStatus} onChange={e=>setPublishStatus(e.target.value as any)}>
+                    {['draft','published'].map(t=> <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
+            </section>
+            <section className='config-preview__bottom'>
               <div className='row'>
-                <label>发布状态：</label>
-                <select value={publishStatus} onChange={e=>setPublishStatus(e.target.value as any)}>
-                  {['draft','published'].map(t=> <option key={t} value={t}>{t}</option>)}
+                <label>图表类型：</label>
+                <select value={chartType} onChange={e=>setChartType(e.target.value as any)}>
+                  {['bar','line','pie','table'].map(t=> <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
-            </div>
+              <div ref={pvRef} id='preview' style={{marginTop:10}} />
+            </section>
           </div>
         </div>
       </div>
