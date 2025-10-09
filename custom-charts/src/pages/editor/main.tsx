@@ -11,7 +11,6 @@ function App(){
   const [dims, setDims] = useState<QueryField[]>([])
   const [mets, setMets] = useState<QueryField[]>([])
   const [chartType, setChartType] = useState<'bar'|'line'|'pie'|'table'>('bar')
-  const [publishStatus, setPublishStatus] = useState<'draft'|'published'>('draft')
   const [name, setName] = useState('')
   const idRef = useRef<string| null>(null)
 
@@ -29,7 +28,6 @@ function App(){
       setName(c.name||'')
       setDataset(c.query?.dataset || 'ads_basic')
       setChartType((c.chartType as any) || 'bar')
-      setPublishStatus((c.publishStatus as any) || 'draft')
       setDims((c.query?.dimensions||[]) as QueryField[])
       setMets((c.query?.metrics||[]) as QueryField[])
     }
@@ -86,7 +84,6 @@ function App(){
       createdAt: idRef.current ? undefined : now,
       updatedAt: now,
       dataSource: dataset,
-      publishStatus,
       chartType,
       tags: [],
       order: Date.now(),
@@ -138,14 +135,6 @@ function App(){
                 <div><strong>指标</strong></div>
                 <div id='pickedMets'>
                   {mets.map(m=> <span key={m.field.id} className='pill'>{m.field.name}<button className='btn' onClick={removeMet}>×</button></span>)}
-                </div>
-              </div>
-              <div style={{marginTop:8}}>
-                <div className='row'>
-                  <label>发布状态：</label>
-                  <select value={publishStatus} onChange={e=>setPublishStatus(e.target.value as any)}>
-                    {['draft','published'].map(t=> <option key={t} value={t}>{t}</option>)}
-                  </select>
                 </div>
               </div>
             </section>
