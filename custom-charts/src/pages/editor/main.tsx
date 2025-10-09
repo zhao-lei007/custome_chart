@@ -6,12 +6,172 @@ import '@/styles/editor.css'
 
 ensureInit()
 
+// 图表类型配置
+type ChartTypeConfig = {
+  value: string
+  label: string
+  dataRequirement: string
+  scenario: string
+  validate: (dims: number, mets: number) => boolean
+}
+
+const CHART_TYPES: ChartTypeConfig[] = [
+  {
+    value: 'bar',
+    label: '柱状图 (Bar)',
+    dataRequirement: '1个或多个维度 + 1个或多个指标',
+    scenario: '在不同类别下显示指标值',
+    validate: (dims, mets) => dims >= 1 && mets >= 1
+  },
+  {
+    value: 'line',
+    label: '折线图 (Line Chart)',
+    dataRequirement: '1个或多个维度 + 1个或多个指标',
+    scenario: '显示指标随时间的变化',
+    validate: (dims, mets) => dims >= 1 && mets >= 1
+  },
+  {
+    value: 'pie',
+    label: '饼图 (Pie Chart)',
+    dataRequirement: '(1个或多个维度 + 1个指标) 或 (0个维度 + 2个或多个指标)',
+    scenario: '显示不同类别的比例',
+    validate: (dims, mets) => (dims >= 1 && mets === 1) || (dims === 0 && mets >= 2)
+  },
+  {
+    value: 'table',
+    label: '表格 (Table)',
+    dataRequirement: '(1个或多个维度 + 0个或多个指标) 或 (0个或多个维度 + 1个或多个指标)',
+    scenario: '显示统计数据',
+    validate: (dims, mets) => (dims >= 1) || (mets >= 1)
+  },
+  {
+    value: 'pivot-table',
+    label: '数据透视表 (Pivot Table)',
+    dataRequirement: '(1个或多个维度 + 0个或多个指标) 或 (0个或多个维度 + 1个或多个指标)',
+    scenario: '显示统计数据或原始数据',
+    validate: (dims, mets) => (dims >= 1) || (mets >= 1)
+  },
+  {
+    value: 'trend-analysis',
+    label: '趋势分析表 (Trend Analysis Table)',
+    dataRequirement: '1个"day"类型的列日期字段 + 0个或多个行维度 + 1个或多个指标',
+    scenario: '根据核心指标按不同日期粒度分析数据聚合，并进一步比较各个指标、查看趋势和计算平均值',
+    validate: (dims, mets) => dims >= 1 && mets >= 1
+  },
+  {
+    value: 'okr-table',
+    label: 'OKR 表格 (OKR Table)',
+    dataRequirement: '1个"day"类型的日期字段 + 0至5个维度 + 1个或多个指标',
+    scenario: '在 OKR 周期内核心指标的进度和完成情况',
+    validate: (dims, mets) => dims >= 1 && dims <= 6 && mets >= 1
+  },
+  {
+    value: 'raw-data-table',
+    label: '原始数据表 (Raw-data Table)',
+    dataRequirement: '(1个或多个维度 + 0个或多个指标) 或 (0个或多个维度 + 1个或多个指标)',
+    scenario: '显示原始数据',
+    validate: (dims, mets) => (dims >= 1) || (mets >= 1)
+  },
+  {
+    value: 'stacked-column',
+    label: '堆叠柱状图 (Stacked Column Chart)',
+    dataRequirement: '1个或多个维度 + 1个或多个指标',
+    scenario: '在不同类别下显示指标值',
+    validate: (dims, mets) => dims >= 1 && mets >= 1
+  },
+  {
+    value: 'stacking-bar',
+    label: '堆叠条形图 (Stacking Bar Chart)',
+    dataRequirement: '1个或多个维度 + 1个或多个指标',
+    scenario: '在不同类别下显示指标值',
+    validate: (dims, mets) => dims >= 1 && mets >= 1
+  },
+  {
+    value: 'area',
+    label: '面积图 (Area Chart)',
+    dataRequirement: '1个或多个维度 + 1个或多个指标',
+    scenario: '显示不同类别下指标值随时间的变化',
+    validate: (dims, mets) => dims >= 1 && mets >= 1
+  },
+  {
+    value: 'dual-axis',
+    label: '双轴图 (Dual-Axis Chart)',
+    dataRequirement: '1个或多个维度 + 1个或多个指标 + 0个或多个次轴指标',
+    scenario: '使用不同的轴图表类型和 Y 轴范围来显示两组在指标值范围上差异较大的指标',
+    validate: (dims, mets) => dims >= 1 && mets >= 1
+  },
+  {
+    value: 'filling-map',
+    label: '填充地图 (Filling Map)',
+    dataRequirement: '1个维度 + 1个指标',
+    scenario: '显示省份/国家的热力图',
+    validate: (dims, mets) => dims === 1 && mets === 1
+  },
+  {
+    value: 'bi-directional-bar',
+    label: '双向条形图 (Bi-directional Bar Chart)',
+    dataRequirement: '1个维度 + 2个指标',
+    scenario: '在同一维度中比较两个指标',
+    validate: (dims, mets) => dims === 1 && mets === 2
+  },
+  {
+    value: 'word-cloud',
+    label: '词云图 (Word Cloud)',
+    dataRequirement: '1个维度 + 0个或1个指标',
+    scenario: '显示大量文本数据，通常用于描述关键词或标签',
+    validate: (dims, mets) => dims === 1 && mets <= 1
+  },
+  {
+    value: 'histogram',
+    label: '直方图 (Histogram)',
+    dataRequirement: '1个维度 + 0个指标',
+    scenario: '显示数据分布、不同间隔的数据频率',
+    validate: (dims, mets) => dims === 1 && mets === 0
+  },
+  {
+    value: 'measure-card',
+    label: '指标卡 (Measure Card)',
+    dataRequirement: '0个或1个维度 + 1个或多个指标',
+    scenario: '用于可视化显示多个核心指标数据（仅显示前 100 张卡片）',
+    validate: (dims, mets) => dims <= 1 && mets >= 1
+  },
+  {
+    value: 'funnel',
+    label: '漏斗图 (Funnel Map)',
+    dataRequirement: '(1个维度 + 1个指标) 或 (0个维度 + 2个或多个指标)',
+    scenario: '显示数据漏斗',
+    validate: (dims, mets) => (dims === 1 && mets === 1) || (dims === 0 && mets >= 2)
+  },
+  {
+    value: 'radar',
+    label: '雷达图 (Radar Map)',
+    dataRequirement: '0个或多个维度 + 1个或多个指标',
+    scenario: '展示多维度评估分数',
+    validate: (_dims, mets) => mets >= 1
+  },
+  {
+    value: 'sankey',
+    label: '桑基图 (Sankey)',
+    dataRequirement: '2个或多个维度 + 1个指标',
+    scenario: '显示不同维度下的流量分布或数据流',
+    validate: (dims, mets) => dims >= 2 && mets === 1
+  },
+  {
+    value: 'waterfall',
+    label: '比例瀑布图 (Proportion Waterfall Plot)',
+    dataRequirement: '1个维度 + 1个指标',
+    scenario: '通常用于理解初始值如何受到一系列中间正值或负值的影响',
+    validate: (dims, mets) => dims === 1 && mets === 1
+  }
+]
+
 function App(){
   const [dataset, setDataset] = useState('ads_basic')
   const [dims, setDims] = useState<QueryField[]>([])
   const [mets, setMets] = useState<QueryField[]>([])
-  const [chartType, setChartType] = useState<'bar'|'line'|'pie'|'table'>('bar')
+  const [chartType, setChartType] = useState<string>('bar')
   const [name, setName] = useState('')
+  const [validationError, setValidationError] = useState<string>('')
   const idRef = useRef<string| null>(null)
 
   const pvRef = useRef<HTMLDivElement>(null)
@@ -48,6 +208,19 @@ function App(){
 
   useEffect(()=>{ draw() },[dataset, dims, mets, chartType])
 
+  // 验证当前选择的维度和指标是否符合图表类型要求
+  useEffect(() => {
+    const currentChartConfig = CHART_TYPES.find(ct => ct.value === chartType)
+    if (currentChartConfig) {
+      const isValid = currentChartConfig.validate(dims.length, mets.length)
+      if (!isValid) {
+        setValidationError(`当前选择不符合${currentChartConfig.label}的数据要求：${currentChartConfig.dataRequirement}`)
+      } else {
+        setValidationError('')
+      }
+    }
+  }, [dims, mets, chartType])
+
   function draw(){
     if(chartType==='table'){
       if(pvRef.current){
@@ -66,13 +239,32 @@ function App(){
     chartRef.current.setOption(option, true)
   }
 
-  function addDim(f:any){ if(!dims.find(d=>d.field.id===f.id)) setDims([ { field:f } as QueryField ]) }
-  function addMet(f:any){ if(!mets.find(m=>m.field.id===f.id)) setMets([ { field:f, aggregation: (f.aggregation||'sum') as QueryField['aggregation'] } as QueryField ]) }
-  function removeDim(){ setDims([]) }
-  function removeMet(){ setMets([]) }
+  function addDim(f:any){ if(!dims.find(d=>d.field.id===f.id)) setDims([...dims, { field:f } as QueryField ]) }
+  function addMet(f:any){ if(!mets.find(m=>m.field.id===f.id)) setMets([...mets, { field:f, aggregation: (f.aggregation||'sum') as QueryField['aggregation'] } as QueryField ]) }
+  function removeDim(e: React.MouseEvent){
+    const btn = e.target as HTMLButtonElement
+    const pill = btn.parentElement
+    const fieldName = pill?.textContent?.replace('×', '').trim()
+    setDims(dims.filter(d => d.field.name !== fieldName))
+  }
+  function removeMet(e: React.MouseEvent){
+    const btn = e.target as HTMLButtonElement
+    const pill = btn.parentElement
+    const fieldName = pill?.textContent?.replace('×', '').trim()
+    setMets(mets.filter(m => m.field.name !== fieldName))
+  }
 
   function onSave(){
-    if(!dims.length || !mets.length){ alert('请至少选择一个维度和一个指标'); return }
+    // 验证数据要求
+    const currentChartConfig = CHART_TYPES.find(ct => ct.value === chartType)
+    if (currentChartConfig) {
+      const isValid = currentChartConfig.validate(dims.length, mets.length)
+      if (!isValid) {
+        alert(`保存失败：当前选择不符合${currentChartConfig.label}的数据要求\n\n${currentChartConfig.dataRequirement}`)
+        return
+      }
+    }
+
     draw()
     let previewImage: string | null = null
     try{ previewImage = chartRef.current?.getDataURL({ pixelRatio:2, backgroundColor:'#fff' }) || null }catch{}
@@ -141,10 +333,59 @@ function App(){
             <section className='config-preview__bottom'>
               <div className='row'>
                 <label>图表类型：</label>
-                <select value={chartType} onChange={e=>setChartType(e.target.value as any)}>
-                  {['bar','line','pie','table'].map(t=> <option key={t} value={t}>{t}</option>)}
-                </select>
+                <div style={{flex: 1}}>
+                  <select
+                    value={chartType}
+                    onChange={e=>setChartType(e.target.value)}
+                    style={{width: '100%'}}
+                  >
+                    {CHART_TYPES.map(ct => (
+                      <option
+                        key={ct.value}
+                        value={ct.value}
+                      >
+                        {ct.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
+              {(() => {
+                const currentConfig = CHART_TYPES.find(ct => ct.value === chartType)
+                return currentConfig ? (
+                  <div style={{
+                    marginTop: 8,
+                    padding: '10px 12px',
+                    background: '#f0f5ff',
+                    border: '1px solid #adc6ff',
+                    borderRadius: '4px',
+                    fontSize: '13px',
+                    lineHeight: '1.6'
+                  }}>
+                    <div style={{marginBottom: 4}}>
+                      <span style={{color: '#1890ff', fontWeight: 500}}>📊 数据要求：</span>
+                      <span style={{color: '#333'}}>{currentConfig.dataRequirement}</span>
+                    </div>
+                    <div>
+                      <span style={{color: '#1890ff', fontWeight: 500}}>💡 适用场景：</span>
+                      <span style={{color: '#333'}}>{currentConfig.scenario}</span>
+                    </div>
+                  </div>
+                ) : null
+              })()}
+              {validationError && (
+                <div style={{
+                  marginTop: 8,
+                  padding: '8px 12px',
+                  background: '#fff2e8',
+                  border: '1px solid #ffbb96',
+                  borderRadius: '4px',
+                  color: '#d4380d',
+                  fontSize: '13px'
+                }}>
+                  ⚠️ {validationError}
+                </div>
+              )}
               <div ref={pvRef} id='preview' style={{marginTop:10}} />
             </section>
           </div>
