@@ -422,14 +422,26 @@ function App(){
         }
 
       case 'filling-map':
-        // 填充地图 (需要地图数据，这里用柱状图代替演示)
+        // 填充地图 (使用颜色编码的柱状图展示地理数据热力效果)
         return {
-          tooltip: {},
-          visualMap: { min: Math.min(...values), max: Math.max(...values), text: ['高', '低'], inRange: { color: ['#e0f3f8', '#abd9e9', '#74add1', '#4575b4', '#313695'] } },
+          tooltip: baseTooltip,
+          xAxis: baseXAxis,
+          yAxis: baseYAxis,
+          visualMap: {
+            min: Math.min(...values),
+            max: Math.max(...values),
+            text: ['高', '低'],
+            inRange: { color: ['#e0f3f8', '#abd9e9', '#74add1', '#4575b4', '#313695'] },
+            calculable: true
+          },
           series: [{
-            type: 'map',
-            map: 'china',
-            data: points.map(p => ({ name: p.name, value: p.value }))
+            type: 'bar',
+            data: values,
+            label: {
+              show: true,
+              position: 'top',
+              formatter: '{c}'
+            }
           }]
         }
 
