@@ -429,7 +429,47 @@ export function runLocalQuery({ dataset, dimensions, metrics }: {dataset:string;
   if(dimensions?.length===1 && metrics?.length===1){
     const dim = dimensions[0].field.id
     const met = metrics[0].field.id
-    return rows.map((r:any)=> ({ name: r[dim], value: Number(r[met])||0 }))
+    const agg = metrics[0].aggregation || 'sum'
+
+    // 按维度分组聚合数据
+    const grouped = new Map<string, number[]>()
+    rows.forEach((r: any) => {
+      const key = r[dim]
+      if (!grouped.has(key)) {
+        grouped.set(key, [])
+      }
+      const val = Number(r[met])
+      if (!isNaN(val)) {
+        grouped.get(key)!.push(val)
+      }
+    })
+
+    // 根据聚合类型计算结果
+    return Array.from(grouped.entries()).map(([name, values]) => {
+      let value = 0
+      if (values.length > 0) {
+        switch(agg) {
+          case 'sum':
+            value = values.reduce((a, b) => a + b, 0)
+            break
+          case 'avg':
+            value = values.reduce((a, b) => a + b, 0) / values.length
+            break
+          case 'max':
+            value = Math.max(...values)
+            break
+          case 'min':
+            value = Math.min(...values)
+            break
+          case 'count':
+            value = values.length
+            break
+          default:
+            value = values.reduce((a, b) => a + b, 0)
+        }
+      }
+      return { name, value }
+    })
   }
   return rows
 }
