@@ -171,7 +171,7 @@ const CHART_TYPES: ChartTypeConfig[] = [
 
 function App(){
   const [datasets, setDatasets] = useState<any[]>([])
-  const [dataset, setDataset] = useState('ads_basic')
+  const [dataset, setDataset] = useState('web_traffic')
   const [currentDatasetFields, setCurrentDatasetFields] = useState<{dimensions: Field[], metrics: Field[]}>({dimensions: [], metrics: []})
   const [dims, setDims] = useState<QueryField[]>([])
   const [mets, setMets] = useState<QueryField[]>([])
@@ -211,7 +211,7 @@ function App(){
       if(!c) return
       idRef.current = c.id
       setName(c.name||'')
-      setDataset(c.query?.dataset || 'ads_basic')
+      setDataset(c.query?.dataset || 'web_traffic')
       setChartType((c.chartType as any) || 'bar')
       setDims((c.query?.dimensions||[]) as QueryField[])
       setMets((c.query?.metrics||[]) as QueryField[])
@@ -247,7 +247,7 @@ function App(){
   }, [dims, mets, chartType])
 
   function draw(){
-    // 处理所有表格类型 - 显示JSON数据
+    // 处理所有表格类型 - 渲染HTML表格
     const tableTypes = ['table', 'pivot-table', 'trend-analysis', 'okr-table', 'raw-data-table']
     if(tableTypes.includes(chartType)){
       // 销毁ECharts实例（如果存在）
@@ -255,10 +255,44 @@ function App(){
         chartRef.current.dispose()
         chartRef.current = null
       }
-      // 显示JSON数据
+      // 渲染HTML表格
       if(pvRef.current){
         const ds = getDatasetById(dataset)
-        pvRef.current.innerHTML = `<pre style="padding:8px; overflow:auto;">${JSON.stringify(ds?.rows||[],null,2)}</pre>`
+        const rows = ds?.rows || []
+
+        if (rows.length === 0) {
+          pvRef.current.innerHTML = '<div style="padding:20px; text-align:center; color:#999;">暂无数据</div>'
+          return
+        }
+
+        // 获取表头（使用第一行的键）
+        const headers = Object.keys(rows[0])
+
+        // 生成表格HTML
+        const tableHTML = `
+          <div style="overflow: auto; max-height: 600px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+              <thead>
+                <tr style="background: #f5f5f5; position: sticky; top: 0;">
+                  ${headers.map(h => `<th style="padding: 8px; border: 1px solid #e0e0e0; text-align: left; font-weight: 600;">${h}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                ${rows.slice(0, 100).map((row: any) => `
+                  <tr style="border-bottom: 1px solid #f0f0f0;">
+                    ${headers.map(h => {
+                      const value = row[h]
+                      const displayValue = value === null || value === undefined ? '-' : String(value)
+                      return `<td style="padding: 8px; border: 1px solid #e0e0e0;">${displayValue}</td>`
+                    }).join('')}
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            ${rows.length > 100 ? `<div style="padding: 10px; text-align: center; color: #999; background: #fafafa;">仅显示前 100 条数据，共 ${rows.length} 条</div>` : ''}
+          </div>
+        `
+        pvRef.current.innerHTML = tableHTML
       }
       return
     }
