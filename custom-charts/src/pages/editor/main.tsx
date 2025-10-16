@@ -317,16 +317,16 @@ function App(){
           <h3>配置预览</h3>
           <div className='content config-preview'>
             <section className='config-preview__top'>
-              <div>
-                <div><strong>维度</strong></div>
-                <div id='pickedDims'>
-                  {dims.map(d=> <span key={d.field.id} className='pill'>{d.field.name}<button className='btn' onClick={removeDim}>×</button></span>)}
+              <div className='field-selector-row'>
+                <div className='field-label'><strong>维度</strong></div>
+                <div id='pickedDims' className='picked-fields'>
+                  {dims.map(d=> <span key={d.field.id} className='pill pill-selected'>{d.field.name}<button className='btn' onClick={removeDim}>×</button></span>)}
                 </div>
               </div>
-              <div style={{marginTop:8}}>
-                <div><strong>指标</strong></div>
-                <div id='pickedMets'>
-                  {mets.map(m=> <span key={m.field.id} className='pill'>{m.field.name}<button className='btn' onClick={removeMet}>×</button></span>)}
+              <div className='field-selector-row' style={{marginTop:8}}>
+                <div className='field-label'><strong>指标</strong></div>
+                <div id='pickedMets' className='picked-fields'>
+                  {mets.map(m=> <span key={m.field.id} className='pill pill-selected'>{m.field.name}<button className='btn' onClick={removeMet}>×</button></span>)}
                 </div>
               </div>
             </section>

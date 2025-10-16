@@ -14,6 +14,10 @@ body{ margin:0; font:14px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helve
 #preview{ height:420px; background:#fff; border:1px solid var(--border); border-radius:6px }
 input,select{ padding:6px 8px; border:1px solid var(--border); border-radius:4px }
 .config-preview{ display:flex; flex-direction:column; min-height:540px }
-.config-preview__top{ flex:1 1 0; overflow:auto; padding-bottom:8px; border-bottom:1px solid var(--border) }
-.config-preview__bottom{ flex:9 1 0; overflow:auto; padding-top:8px }
+.config-preview__top{ flex:0 0 auto; min-height:120px; max-height:200px; overflow:auto; padding-bottom:8px; border-bottom:1px solid var(--border) }
+.config-preview__bottom{ flex:1 1 auto; overflow:auto; padding-top:8px }
+.field-selector-row{ display:flex; flex-direction:row; align-items:center; gap:12px }
+.field-label{ min-width:60px; flex-shrink:0 }
+.picked-fields{ flex:1; display:flex; flex-wrap:wrap; align-items:center; gap:4px }
+.pill-selected{ font-size:12px; color:#3772FF; border-color:#3772FF }
 
