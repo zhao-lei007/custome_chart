@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import * as echarts from 'echarts'
-import { DIMENSION_FIELDS, METRIC_FIELDS, ensureInit, getCharts, getDatasetById, runLocalQuery, saveChart, uid, type QueryField } from '@/shared/storage'
+import { ensureInit, getCharts, getDatasetById, getAllDatasets, runLocalQuery, saveChart, uid, type QueryField, type Field } from '@/shared/storage'
 import '@/styles/editor.css'
 
 ensureInit()
@@ -166,7 +166,9 @@ const CHART_TYPES: ChartTypeConfig[] = [
 ]
 
 function App(){
+  const [datasets, setDatasets] = useState<any[]>([])
   const [dataset, setDataset] = useState('ads_basic')
+  const [currentDatasetFields, setCurrentDatasetFields] = useState<{dimensions: Field[], metrics: Field[]}>({dimensions: [], metrics: []})
   const [dims, setDims] = useState<QueryField[]>([])
   const [mets, setMets] = useState<QueryField[]>([])
   const [chartType, setChartType] = useState<string>('bar')
@@ -176,6 +178,25 @@ function App(){
 
   const pvRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<echarts.EChartsType | null>(null)
+
+  // Load all datasets on mount
+  useEffect(() => {
+    const allDatasets = getAllDatasets()
+    setDatasets(allDatasets)
+  }, [])
+
+  // Update fields when dataset changes
+  useEffect(() => {
+    const ds = getDatasetById(dataset)
+    if (ds && ds.fields) {
+      const dimensions = ds.fields.filter((f: Field) => f.type === 'dimension')
+      const metrics = ds.fields.filter((f: Field) => f.type === 'metric')
+      setCurrentDatasetFields({ dimensions, metrics })
+      // Clear selected dims and mets when switching datasets
+      setDims([])
+      setMets([])
+    }
+  }, [dataset])
 
   useEffect(()=>{ // load if editing
     function loadChart(chartId?: string){
@@ -333,13 +354,16 @@ function App(){
           <div className='content'>
             <div className='row'><strong>数据集：</strong>
               <select value={dataset} onChange={e=>setDataset(e.target.value)}>
-                {[{id:'ads_basic', name:'广告基础数据'}].map(d=> <option key={d.id} value={d.id}>{d.name}</option>)}
+                {datasets.map(d=> <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
+            <div style={{fontSize: 12, color: '#666', marginTop: 4, marginBottom: 12}}>
+              {getDatasetById(dataset)?.description || ''}
+            </div>
             <h4>维度</h4>
-            <div>{DIMENSION_FIELDS.map((f:any)=> <div key={f.id} className='field' onClick={()=>addDim(f)}>{f.name} ({f.id})</div>)}</div>
+            <div>{currentDatasetFields.dimensions.map((f:any)=> <div key={f.id} className='field' onClick={()=>addDim(f)}>{f.name} ({f.id})</div>)}</div>
             <h4>指标</h4>
-            <div>{METRIC_FIELDS.map((f:any)=> <div key={f.id} className='field' onClick={()=>addMet(f)}>{f.name} ({f.id})</div>)}</div>
+            <div>{currentDatasetFields.metrics.map((f:any)=> <div key={f.id} className='field' onClick={()=>addMet(f)}>{f.name} ({f.id})</div>)}</div>
           </div>
         </div>
         <div className='panel'>
