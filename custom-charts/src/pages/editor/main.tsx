@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client'
 import * as echarts from 'echarts'
 import { ensureInit, getCharts, getDatasetById, getAllDatasets, runLocalQuery, saveChart, uid, type QueryField, type Field } from '@/shared/storage'
 import '@/styles/editor.css'
+import chinaGeoJSON from '@/assets/china.json'
+
+// 注册中国地图
+echarts.registerMap('china', chinaGeoJSON as any)
 
 ensureInit()
 
@@ -422,26 +426,39 @@ function App(){
         }
 
       case 'filling-map':
-        // 填充地图 (使用颜色编码的柱状图展示地理数据热力效果)
+        // 填充地图 (使用中国地图展示地理数据热力分布)
         return {
-          tooltip: baseTooltip,
-          xAxis: baseXAxis,
-          yAxis: baseYAxis,
+          tooltip: {
+            trigger: 'item',
+            formatter: '{b}<br/>{c}'
+          },
           visualMap: {
             min: Math.min(...values),
             max: Math.max(...values),
             text: ['高', '低'],
-            inRange: { color: ['#e0f3f8', '#abd9e9', '#74add1', '#4575b4', '#313695'] },
-            calculable: true
+            realtime: false,
+            calculable: true,
+            inRange: {
+              color: ['#e0f3f8', '#abd9e9', '#74add1', '#4575b4', '#313695']
+            }
           },
           series: [{
-            type: 'bar',
-            data: values,
+            type: 'map',
+            map: 'china',
+            roam: true,
             label: {
               show: true,
-              position: 'top',
-              formatter: '{c}'
-            }
+              fontSize: 10
+            },
+            emphasis: {
+              label: {
+                show: true
+              },
+              itemStyle: {
+                areaColor: '#ffd700'
+              }
+            },
+            data: points.map(p => ({ name: p.name, value: p.value }))
           }]
         }
 
