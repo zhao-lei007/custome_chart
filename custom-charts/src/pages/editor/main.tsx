@@ -222,20 +222,49 @@ function App(){
   }, [dims, mets, chartType])
 
   function draw(){
-    if(chartType==='table'){
+    // 处理所有表格类型 - 显示JSON数据
+    const tableTypes = ['table', 'pivot-table', 'trend-analysis', 'okr-table', 'raw-data-table']
+    if(tableTypes.includes(chartType)){
+      // 销毁ECharts实例（如果存在）
+      if(chartRef.current){
+        chartRef.current.dispose()
+        chartRef.current = null
+      }
+      // 显示JSON数据
       if(pvRef.current){
         const ds = getDatasetById(dataset)
         pvRef.current.innerHTML = `<pre style="padding:8px; overflow:auto;">${JSON.stringify(ds?.rows||[],null,2)}</pre>`
       }
       return
     }
+
+    // 处理图表类型 - 使用ECharts渲染
     if(!pvRef.current) return
-    if(!chartRef.current) chartRef.current = echarts.init(pvRef.current)
+
+    // 如果之前是表格，清除innerHTML
+    if(pvRef.current.innerHTML && pvRef.current.querySelector('pre')){
+      pvRef.current.innerHTML = ''
+      chartRef.current = null
+    }
+
+    // 初始化或获取ECharts实例
+    if(!chartRef.current){
+      chartRef.current = echarts.init(pvRef.current)
+    }
+
+    // 获取查询数据
     const points = runLocalQuery({ dataset, dimensions: dims, metrics: mets }) as any[]
+
+    // 构建图表数据
     const names = points.map(p=>p.name)
     const values = points.map(p=>p.value)
-    const option = chartType==='pie' ? { tooltip:{}, series:[{ type:'pie', radius:'60%', data:points }] } :
-      { tooltip:{}, xAxis:{ type:'category', data:names }, yAxis:{ type:'value' }, series:[{ type: chartType==='line'?'line':'bar', data:values }] }
+
+    // 根据图表类型构建配置
+    const option = chartType==='pie'
+      ? { tooltip:{}, series:[{ type:'pie', radius:'60%', data:points }] }
+      : { tooltip:{}, xAxis:{ type:'category', data:names }, yAxis:{ type:'value' }, series:[{ type: chartType==='line'?'line':'bar', data:values }] }
+
+    // 渲染图表
     chartRef.current.setOption(option, true)
   }
 
