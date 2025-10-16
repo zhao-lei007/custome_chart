@@ -281,12 +281,167 @@ function App(){
     const values = points.map(p=>p.value)
 
     // 根据图表类型构建配置
-    const option = chartType==='pie'
-      ? { tooltip:{}, series:[{ type:'pie', radius:'60%', data:points }] }
-      : { tooltip:{}, xAxis:{ type:'category', data:names }, yAxis:{ type:'value' }, series:[{ type: chartType==='line'?'line':'bar', data:values }] }
+    const option = buildChartOption(chartType, names, values, points)
 
     // 渲染图表
     chartRef.current.setOption(option, true)
+  }
+
+  // 构建不同图表类型的 ECharts 配置
+  function buildChartOption(chartType: string, names: any[], values: any[], points: any[]) {
+    const baseTooltip = { trigger: 'axis' }
+    const baseXAxis = { type: 'category', data: names }
+    const baseYAxis = { type: 'value' }
+
+    switch (chartType) {
+      case 'bar':
+        return {
+          tooltip: baseTooltip,
+          xAxis: baseXAxis,
+          yAxis: baseYAxis,
+          series: [{ type: 'bar', data: values }]
+        }
+
+      case 'line':
+        return {
+          tooltip: baseTooltip,
+          xAxis: baseXAxis,
+          yAxis: baseYAxis,
+          series: [{ type: 'line', data: values, smooth: true }]
+        }
+
+      case 'pie':
+        return {
+          tooltip: { trigger: 'item' },
+          series: [{ type: 'pie', radius: '60%', data: points, emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0, 0, 0, 0.5)' } } }]
+        }
+
+      case 'area':
+        return {
+          tooltip: baseTooltip,
+          xAxis: baseXAxis,
+          yAxis: baseYAxis,
+          series: [{ type: 'line', data: values, areaStyle: {}, smooth: true }]
+        }
+
+      case 'stacked-column':
+      case 'stacking-bar':
+        return {
+          tooltip: baseTooltip,
+          xAxis: chartType === 'stacking-bar' ? baseYAxis : baseXAxis,
+          yAxis: chartType === 'stacking-bar' ? { ...baseXAxis, type: 'category' } : baseYAxis,
+          series: [{ type: 'bar', data: values, stack: 'total', emphasis: { focus: 'series' } }]
+        }
+
+      case 'funnel':
+        return {
+          tooltip: { trigger: 'item', formatter: '{b}: {c}' },
+          series: [{ type: 'funnel', sort: 'descending', gap: 2, data: points.map(p => ({ value: p.value, name: p.name })) }]
+        }
+
+      case 'radar':
+        const indicators = names.map(name => ({ name, max: Math.max(...values) * 1.2 }))
+        return {
+          tooltip: {},
+          radar: { indicator: indicators },
+          series: [{ type: 'radar', data: [{ value: values, name: '评分' }] }]
+        }
+
+      case 'waterfall':
+        // 瀑布图：显示累积效果（暂用柱状图表示）
+        return {
+          tooltip: baseTooltip,
+          xAxis: baseXAxis,
+          yAxis: baseYAxis,
+          series: [{ type: 'bar', data: values, itemStyle: { color: (params: any) => params.value > 0 ? '#5470c6' : '#ee6666' } }]
+        }
+
+      case 'dual-axis':
+        return {
+          tooltip: baseTooltip,
+          xAxis: baseXAxis,
+          yAxis: [baseYAxis, { ...baseYAxis, splitLine: { show: false } }],
+          series: [
+            { type: 'bar', data: values },
+            { type: 'line', data: values.map(v => v * 1.2), yAxisIndex: 1 }
+          ]
+        }
+
+      case 'bi-directional-bar':
+        return {
+          tooltip: baseTooltip,
+          xAxis: { ...baseYAxis, splitLine: { show: false } },
+          yAxis: { ...baseXAxis, type: 'category' },
+          series: [
+            { type: 'bar', data: values.map(v => -Math.abs(v * 0.6)), stack: 'total' },
+            { type: 'bar', data: values, stack: 'total' }
+          ]
+        }
+
+      case 'measure-card':
+        // 指标卡显示为柱状图的简化版本
+        return {
+          tooltip: {},
+          xAxis: { show: false },
+          yAxis: { show: false },
+          series: [{ type: 'bar', data: values, itemStyle: { color: '#3772FF' } }]
+        }
+
+      case 'word-cloud':
+        // 词云图 (ECharts 需要 echarts-wordcloud 插件，这里用散点图模拟)
+        return {
+          tooltip: {},
+          xAxis: { show: false },
+          yAxis: { show: false },
+          series: [{
+            type: 'scatter',
+            symbolSize: (val: any) => Math.sqrt(val[1]) * 10,
+            data: points.map((p, i) => [i, p.value, p.name]),
+            label: { show: true, formatter: (params: any) => params.data[2], position: 'inside' }
+          }]
+        }
+
+      case 'histogram':
+        // 直方图：显示数据分布
+        return {
+          tooltip: baseTooltip,
+          xAxis: baseXAxis,
+          yAxis: baseYAxis,
+          series: [{ type: 'bar', data: values, barCategoryGap: '0%' }]
+        }
+
+      case 'sankey':
+        // 桑基图：显示流量
+        return {
+          tooltip: {},
+          series: [{
+            type: 'sankey',
+            data: names.map(name => ({ name })),
+            links: points.slice(0, -1).map((p, i) => ({ source: p.name, target: points[i + 1]?.name || p.name, value: p.value }))
+          }]
+        }
+
+      case 'filling-map':
+        // 填充地图 (需要地图数据，这里用柱状图代替演示)
+        return {
+          tooltip: {},
+          visualMap: { min: Math.min(...values), max: Math.max(...values), text: ['高', '低'], inRange: { color: ['#e0f3f8', '#abd9e9', '#74add1', '#4575b4', '#313695'] } },
+          series: [{
+            type: 'map',
+            map: 'china',
+            data: points.map(p => ({ name: p.name, value: p.value }))
+          }]
+        }
+
+      default:
+        // 默认使用柱状图
+        return {
+          tooltip: baseTooltip,
+          xAxis: baseXAxis,
+          yAxis: baseYAxis,
+          series: [{ type: 'bar', data: values }]
+        }
+    }
   }
 
   function addDim(f:any){ if(!dims.find(d=>d.field.id===f.id)) setDims([...dims, { field:f } as QueryField ]) }
