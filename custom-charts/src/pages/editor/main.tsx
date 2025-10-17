@@ -218,8 +218,15 @@ function App(){
       const dimensions = ds.fields.filter((f: Field) => f.type === 'dimension')
       const metrics = ds.fields.filter((f: Field) => f.type === 'metric')
       setCurrentDatasetFields({ dimensions, metrics })
-      // Clear selected dims and mets when switching datasets
-      setDims([])
+
+      // 自动选择日期维度（必选）
+      const dateField = dimensions.find((f: Field) => f.dataType === 'date')
+      if (dateField) {
+        setDims([{ field: dateField } as QueryField])
+      } else {
+        setDims([])
+      }
+
       setMets([])
       setDimensionFilters(new Map())
     }
@@ -628,7 +635,12 @@ function App(){
 
   function addDim(f:any){ if(!dims.find(d=>d.field.id===f.id)) setDims([...dims, { field:f } as QueryField ]) }
   function addMet(f:any){ if(!mets.find(m=>m.field.id===f.id)) setMets([...mets, { field:f, aggregation: (f.aggregation||'sum') as QueryField['aggregation'] } as QueryField ]) }
-  function removeDim(e: React.MouseEvent){
+  function removeDim(e: React.MouseEvent, field: Field){
+    // 禁止删除日期维度（必选项）
+    if (field.dataType === 'date') {
+      alert('日期维度是必选项，不能删除')
+      return
+    }
     const btn = e.target as HTMLButtonElement
     const pill = btn.parentElement
     const fieldName = pill?.textContent?.replace('×', '').trim()
@@ -744,7 +756,13 @@ function App(){
               <div className='field-selector-row'>
                 <div className='field-label'><strong>维度</strong></div>
                 <div id='pickedDims' className='picked-fields'>
-                  {dims.map(d=> <span key={d.field.id} className='pill pill-selected'>{d.field.name}<button className='btn' onClick={removeDim}>×</button></span>)}
+                  {dims.map(d=> (
+                    <span key={d.field.id} className='pill pill-selected'>
+                      {d.field.dataType === 'date' && '🔒 '}
+                      {d.field.name}
+                      {d.field.dataType !== 'date' && <button className='btn' onClick={(e) => removeDim(e, d.field)}>×</button>}
+                    </span>
+                  ))}
                 </div>
               </div>
               <div className='field-selector-row' style={{marginTop:8}}>

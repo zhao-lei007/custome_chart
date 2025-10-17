@@ -60,6 +60,7 @@ export const SAMPLE_QUERY_DATA = [
 
 // ==================== 销售数据集字段 ====================
 export const SALES_DIMENSIONS: Field[] = [
+  { id: 'date', name: '日期', dataType: 'date', description: '销售日期', type:'dimension' },
   { id: 'region', name: '地区', dataType: 'string', description: '销售区域', type:'dimension' },
   { id: 'product_category', name: '产品类别', dataType: 'string', description: '产品分类', type:'dimension' },
   { id: 'quarter', name: '季度', dataType: 'string', description: '销售季度', type:'dimension' },
@@ -105,6 +106,7 @@ export const SATISFACTION_METRICS: Field[] = [
 
 // ==================== 地理销售数据集字段 ====================
 export const GEO_DIMENSIONS: Field[] = [
+  { id: 'date', name: '日期', dataType: 'date', description: '统计日期', type:'dimension' },
   { id: 'province', name: '省份', dataType: 'string', description: '省份名称', type:'dimension' },
   { id: 'city', name: '城市', dataType: 'string', description: '城市名称', type:'dimension' },
   { id: 'store_type', name: '门店类型', dataType: 'string', description: '门店类别', type:'dimension' },
@@ -119,6 +121,7 @@ export const GEO_METRICS: Field[] = [
 
 // ==================== 产品目录数据集字段 ====================
 export const PRODUCT_DIMENSIONS: Field[] = [
+  { id: 'date', name: '日期', dataType: 'date', description: '销售日期', type:'dimension' },
   { id: 'product_name', name: '产品名称', dataType: 'string', description: '产品名', type:'dimension' },
   { id: 'category', name: '类别', dataType: 'string', description: '产品类别', type:'dimension' },
   { id: 'brand', name: '品牌', dataType: 'string', description: '品牌名称', type:'dimension' },
@@ -135,6 +138,7 @@ export const PRODUCT_METRICS: Field[] = [
 
 // ==================== 营销漏斗数据集字段 ====================
 export const FUNNEL_DIMENSIONS: Field[] = [
+  { id: 'date', name: '日期', dataType: 'date', description: '统计日期', type:'dimension' },
   { id: 'funnel_stage', name: '漏斗阶段', dataType: 'string', description: '转化漏斗阶段', type:'dimension' },
   { id: 'campaign', name: '营销活动', dataType: 'string', description: '活动名称', type:'dimension' },
   { id: 'channel', name: '渠道', dataType: 'string', description: '营销渠道', type:'dimension' },
@@ -173,19 +177,23 @@ function generateSalesData() {
   const salespeople = ['张伟', '李娜', '王强', '刘敏', '陈杰']
 
   const data = []
-  for(const region of regions) {
-    for(const category of categories) {
-      for(const quarter of quarters) {
-        const salesperson = salespeople[Math.floor(Math.random() * salespeople.length)]
-        data.push({
-          region, product_category: category, quarter, salesperson,
-          revenue: Math.floor(Math.random() * 500000) + 100000,
-          units_sold: Math.floor(Math.random() * 5000) + 500,
-          profit: Math.floor(Math.random() * 150000) + 30000,
-          growth_rate: parseFloat((Math.random() * 40 - 10).toFixed(2))
-        })
-      }
-    }
+  const startDate = new Date('2024-01-01')
+  for(let day = 0; day < 120; day++) {
+    const date = new Date(startDate.getTime() + day * 86400000)
+    const dateStr = date.toISOString().split('T')[0]
+    const region = regions[Math.floor(Math.random() * regions.length)]
+    const category = categories[Math.floor(Math.random() * categories.length)]
+    const quarter = quarters[Math.floor(day / 30)]
+    const salesperson = salespeople[Math.floor(Math.random() * salespeople.length)]
+
+    data.push({
+      date: dateStr,
+      region, product_category: category, quarter, salesperson,
+      revenue: Math.floor(Math.random() * 500000) + 100000,
+      units_sold: Math.floor(Math.random() * 5000) + 500,
+      profit: Math.floor(Math.random() * 150000) + 30000,
+      growth_rate: parseFloat((Math.random() * 40 - 10).toFixed(2))
+    })
   }
   return data
 }
@@ -262,9 +270,15 @@ function generateGeoData() {
   const storeTypes = ['旗舰店', '标准店', '便利店']
 
   const data = []
-  for(const {province, city} of provinces) {
+  const startDate = new Date('2024-01-01')
+  for(let day = 0; day < 90; day++) {
+    const date = new Date(startDate.getTime() + day * 86400000)
+    const dateStr = date.toISOString().split('T')[0]
+    const {province, city} = provinces[Math.floor(Math.random() * provinces.length)]
     const storeType = storeTypes[Math.floor(Math.random() * storeTypes.length)]
+
     data.push({
+      date: dateStr,
       province, city, store_type: storeType,
       store_count: Math.floor(Math.random() * 50) + 5,
       total_sales: Math.floor(Math.random() * 5000000) + 500000,
@@ -293,13 +307,17 @@ function generateProductData() {
   const priceRanges = ['经济型', '中端', '高端']
 
   const data = []
-  for(let i = 0; i < products.length; i++) {
-    const product = products[i]
-    const category = categories[Math.floor(i / 6) % categories.length]
+  const startDate = new Date('2024-01-01')
+  for(let day = 0; day < 90; day++) {
+    const date = new Date(startDate.getTime() + day * 86400000)
+    const dateStr = date.toISOString().split('T')[0]
+    const product = products[Math.floor(Math.random() * products.length)]
+    const category = categories[Math.floor(Math.random() * categories.length)]
     const brand = brands[Math.floor(Math.random() * brands.length)]
     const priceRange = priceRanges[Math.floor(Math.random() * priceRanges.length)]
 
     data.push({
+      date: dateStr,
       product_name: product, category, brand, price_range: priceRange,
       sales_volume: Math.floor(Math.random() * 10000) + 500,
       revenue: Math.floor(Math.random() * 500000) + 50000,
@@ -317,21 +335,23 @@ function generateFunnelData() {
   const channels = ['搜索广告', '社交媒体', '展示广告', '邮件营销']
 
   const data = []
-  for(const campaign of campaigns) {
-    for(const channel of channels) {
-      let baseCount = 100000
-      for(const stage of stages) {
-        const convRate = parseFloat((Math.random() * 30 + 40).toFixed(2))
-        data.push({
-          funnel_stage: stage, campaign, channel,
-          user_count: Math.floor(baseCount),
-          conversion_rate: convRate,
-          cost: Math.floor(Math.random() * 50000) + 10000,
-          roi: parseFloat((Math.random() * 200 + 50).toFixed(2))
-        })
-        baseCount *= (convRate / 100)
-      }
-    }
+  const startDate = new Date('2024-01-01')
+  for(let day = 0; day < 120; day++) {
+    const date = new Date(startDate.getTime() + day * 86400000)
+    const dateStr = date.toISOString().split('T')[0]
+    const campaign = campaigns[Math.floor(Math.random() * campaigns.length)]
+    const channel = channels[Math.floor(Math.random() * channels.length)]
+    const stage = stages[Math.floor(Math.random() * stages.length)]
+    const convRate = parseFloat((Math.random() * 30 + 40).toFixed(2))
+
+    data.push({
+      date: dateStr,
+      funnel_stage: stage, campaign, channel,
+      user_count: Math.floor(Math.random() * 100000) + 10000,
+      conversion_rate: convRate,
+      cost: Math.floor(Math.random() * 50000) + 10000,
+      roi: parseFloat((Math.random() * 200 + 50).toFixed(2))
+    })
   }
   return data
 }
