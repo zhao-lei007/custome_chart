@@ -186,3 +186,27 @@ input,select{ padding:6px 8px; border:1px solid var(--border); border-radius:4px
   border-color:var(--primary);
 }
 
+/* 字段搜索框样式 */
+.field-search-input{
+  width:100%;
+  padding:6px 10px;
+  border:1px solid var(--border);
+  border-radius:4px;
+  font-size:13px;
+  background:#fafafa;
+  transition:all 0.2s;
+  box-sizing:border-box;
+}
+
+.field-search-input:focus{
+  outline:none;
+  border-color:var(--primary);
+  background:#fff;
+  box-shadow:0 0 0 2px rgba(55, 114, 255, 0.1);
+}
+
+.field-search-input::placeholder{
+  color:var(--muted);
+  font-size:12px;
+}
+

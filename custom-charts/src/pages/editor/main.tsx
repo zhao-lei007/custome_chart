@@ -200,6 +200,9 @@ function App(){
   const [validationError, setValidationError] = useState<string>('')
   const [dimensionFilters, setDimensionFilters] = useState<Map<string, DimensionFilter>>(new Map())
   const [showFilterDropdown, setShowFilterDropdown] = useState<string | null>(null)
+  const [datasetSearchTerm, setDatasetSearchTerm] = useState('')
+  const [dimensionSearchTerm, setDimensionSearchTerm] = useState('')
+  const [metricSearchTerm, setMetricSearchTerm] = useState('')
   const idRef = useRef<string| null>(null)
 
   const pvRef = useRef<HTMLDivElement>(null)
@@ -735,18 +738,90 @@ function App(){
         <div className='panel'>
           <h3>数据集与字段</h3>
           <div className='content'>
-            <div className='row'><strong>数据集：</strong>
-              <select value={dataset} onChange={e=>setDataset(e.target.value)}>
-                {datasets.map(d=> <option key={d.id} value={d.id}>{d.name}</option>)}
+            <div style={{marginBottom: 8}}>
+              <strong style={{display: 'block', marginBottom: 6}}>数据集：</strong>
+              <input
+                type="text"
+                placeholder="搜索数据集..."
+                value={datasetSearchTerm}
+                onChange={e => setDatasetSearchTerm(e.target.value)}
+                className='field-search-input'
+                style={{marginBottom: 6}}
+              />
+              <select
+                value={dataset}
+                onChange={e=>setDataset(e.target.value)}
+                style={{width: '100%'}}
+              >
+                {datasets
+                  .filter((d:any) => {
+                    if (!datasetSearchTerm) return true
+                    const term = datasetSearchTerm.toLowerCase()
+                    return d.name.toLowerCase().includes(term) || (d.id && d.id.toLowerCase().includes(term))
+                  })
+                  .map((d:any)=> <option key={d.id} value={d.id}>{d.name}</option>)
+                }
               </select>
             </div>
             <div style={{fontSize: 12, color: '#666', marginTop: 4, marginBottom: 12}}>
               {getDatasetById(dataset)?.description || ''}
             </div>
             <h4>维度</h4>
-            <div>{currentDatasetFields.dimensions.map((f:any)=> <div key={f.id} className='field' onClick={()=>addDim(f)}>{f.name} ({f.id})</div>)}</div>
+            <input
+              type="text"
+              placeholder="搜索维度..."
+              value={dimensionSearchTerm}
+              onChange={e => setDimensionSearchTerm(e.target.value)}
+              className='field-search-input'
+              style={{marginBottom: 8}}
+            />
+            <div>
+              {currentDatasetFields.dimensions
+                .filter((f:any) => {
+                  if (!dimensionSearchTerm) return true
+                  const term = dimensionSearchTerm.toLowerCase()
+                  return f.name.toLowerCase().includes(term) || f.id.toLowerCase().includes(term)
+                })
+                .map((f:any)=> <div key={f.id} className='field' onClick={()=>addDim(f)}>{f.name} ({f.id})</div>)
+              }
+              {currentDatasetFields.dimensions.filter((f:any) => {
+                if (!dimensionSearchTerm) return false
+                const term = dimensionSearchTerm.toLowerCase()
+                return !(f.name.toLowerCase().includes(term) || f.id.toLowerCase().includes(term))
+              }).length === currentDatasetFields.dimensions.length && dimensionSearchTerm && (
+                <div style={{padding: '8px', color: '#999', fontSize: 12, textAlign: 'center'}}>
+                  未找到匹配的维度
+                </div>
+              )}
+            </div>
             <h4>指标</h4>
-            <div>{currentDatasetFields.metrics.map((f:any)=> <div key={f.id} className='field' onClick={()=>addMet(f)}>{f.name} ({f.id})</div>)}</div>
+            <input
+              type="text"
+              placeholder="搜索指标..."
+              value={metricSearchTerm}
+              onChange={e => setMetricSearchTerm(e.target.value)}
+              className='field-search-input'
+              style={{marginBottom: 8}}
+            />
+            <div>
+              {currentDatasetFields.metrics
+                .filter((f:any) => {
+                  if (!metricSearchTerm) return true
+                  const term = metricSearchTerm.toLowerCase()
+                  return f.name.toLowerCase().includes(term) || f.id.toLowerCase().includes(term)
+                })
+                .map((f:any)=> <div key={f.id} className='field' onClick={()=>addMet(f)}>{f.name} ({f.id})</div>)
+              }
+              {currentDatasetFields.metrics.filter((f:any) => {
+                if (!metricSearchTerm) return false
+                const term = metricSearchTerm.toLowerCase()
+                return !(f.name.toLowerCase().includes(term) || f.id.toLowerCase().includes(term))
+              }).length === currentDatasetFields.metrics.length && metricSearchTerm && (
+                <div style={{padding: '8px', color: '#999', fontSize: 12, textAlign: 'center'}}>
+                  未找到匹配的指标
+                </div>
+              )}
+            </div>
           </div>
         </div>
         <div className='panel'>
