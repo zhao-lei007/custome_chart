@@ -423,9 +423,9 @@ export function getDatasetById(id: string){
   return datasets.find(d=>d.id===id)
 }
 
-export function runLocalQuery({ dataset, dimensions, metrics }: {dataset:string; dimensions:QueryField[]; metrics:QueryField[]}){
+export function runLocalQuery({ dataset, dimensions, metrics, rows: inputRows }: {dataset:string; dimensions:QueryField[]; metrics:QueryField[]; rows?: any[]}){
   const ds = getDatasetById(dataset)
-  const rows = ds?.rows || []
+  const rows = inputRows || ds?.rows || []
   if(dimensions?.length===1 && metrics?.length===1){
     const dim = dimensions[0].field.id
     const met = metrics[0].field.id

@@ -5,6 +5,26 @@ import { ensureInit, getCharts, getDatasetById, getAllDatasets, runLocalQuery, s
 import '@/styles/editor.css'
 import chinaGeoJSON from '@/assets/china.json'
 
+// 维度筛选器类型定义
+type DateGranularity = 'day' | 'week' | 'month' | 'quarter' | 'year'
+
+type DateFilterConfig = {
+  granularity: DateGranularity
+  startDate: string
+  endDate: string
+}
+
+type CategoricalFilterConfig = {
+  selectedValues: string[]
+  searchTerm: string
+}
+
+type DimensionFilter = {
+  dimensionId: string
+  type: 'date' | 'categorical'
+  config: DateFilterConfig | CategoricalFilterConfig
+}
+
 // 注册中国地图
 echarts.registerMap('china', chinaGeoJSON as any)
 
@@ -178,6 +198,8 @@ function App(){
   const [chartType, setChartType] = useState<string>('bar')
   const [name, setName] = useState('')
   const [validationError, setValidationError] = useState<string>('')
+  const [dimensionFilters, setDimensionFilters] = useState<Map<string, DimensionFilter>>(new Map())
+  const [showFilterDropdown, setShowFilterDropdown] = useState<string | null>(null)
   const idRef = useRef<string| null>(null)
 
   const pvRef = useRef<HTMLDivElement>(null)
@@ -199,8 +221,64 @@ function App(){
       // Clear selected dims and mets when switching datasets
       setDims([])
       setMets([])
+      setDimensionFilters(new Map())
     }
   }, [dataset])
+
+  // Initialize filters when dimensions change
+  useEffect(() => {
+    const newFilters = new Map<string, DimensionFilter>()
+    const ds = getDatasetById(dataset)
+    const rows = ds?.rows || []
+
+    dims.forEach(dim => {
+      const field = dim.field
+      if (field.dataType === 'date') {
+        // 日期类型维度 - 初始化日期筛选器
+        const existingFilter = dimensionFilters.get(field.id)
+        if (existingFilter && existingFilter.type === 'date') {
+          newFilters.set(field.id, existingFilter)
+        } else {
+          const dateValues = rows.map((r: any) => r[field.id]).filter((v: any) => v)
+          const sortedDates = dateValues.sort()
+          newFilters.set(field.id, {
+            dimensionId: field.id,
+            type: 'date',
+            config: {
+              granularity: 'day',
+              startDate: sortedDates[0] || '',
+              endDate: sortedDates[sortedDates.length - 1] || ''
+            }
+          })
+        }
+      } else {
+        // 分类类型维度 - 初始化多选筛选器
+        const existingFilter = dimensionFilters.get(field.id)
+        const uniqueValues = Array.from(new Set(rows.map((r: any) => r[field.id]).filter((v: any) => v))) as string[]
+
+        if (existingFilter && existingFilter.type === 'categorical') {
+          newFilters.set(field.id, {
+            ...existingFilter,
+            config: {
+              ...(existingFilter.config as CategoricalFilterConfig),
+              selectedValues: (existingFilter.config as CategoricalFilterConfig).selectedValues.filter(v => uniqueValues.includes(v))
+            }
+          })
+        } else {
+          newFilters.set(field.id, {
+            dimensionId: field.id,
+            type: 'categorical',
+            config: {
+              selectedValues: uniqueValues,
+              searchTerm: ''
+            }
+          })
+        }
+      }
+    })
+
+    setDimensionFilters(newFilters)
+  }, [dims, dataset])
 
   useEffect(()=>{ // load if editing
     function loadChart(chartId?: string){
@@ -231,7 +309,19 @@ function App(){
     return () => window.removeEventListener('message', handleMessage)
   },[])
 
-  useEffect(()=>{ draw() },[dataset, dims, mets, chartType])
+  useEffect(()=>{ draw() },[dataset, dims, mets, chartType, dimensionFilters])
+
+  // 点击外部关闭筛选器下拉菜单
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement
+      if (!target.closest('.filter-item')) {
+        setShowFilterDropdown(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // 验证当前选择的维度和指标是否符合图表类型要求
   useEffect(() => {
@@ -246,6 +336,29 @@ function App(){
     }
   }, [dims, mets, chartType])
 
+  // 应用维度筛选
+  function applyDimensionFilters(rows: any[]): any[] {
+    if (dimensionFilters.size === 0) return rows
+
+    return rows.filter(row => {
+      for (const [dimId, filter] of dimensionFilters.entries()) {
+        const value = row[dimId]
+
+        if (filter.type === 'date') {
+          const config = filter.config as DateFilterConfig
+          if (config.startDate && value < config.startDate) return false
+          if (config.endDate && value > config.endDate) return false
+        } else if (filter.type === 'categorical') {
+          const config = filter.config as CategoricalFilterConfig
+          if (config.selectedValues.length > 0 && !config.selectedValues.includes(value)) {
+            return false
+          }
+        }
+      }
+      return true
+    })
+  }
+
   function draw(){
     // 处理所有表格类型 - 渲染HTML表格
     const tableTypes = ['table', 'pivot-table', 'trend-analysis', 'okr-table', 'raw-data-table']
@@ -258,7 +371,8 @@ function App(){
       // 渲染HTML表格
       if(pvRef.current){
         const ds = getDatasetById(dataset)
-        const rows = ds?.rows || []
+        let rows = ds?.rows || []
+        rows = applyDimensionFilters(rows)
 
         if (rows.length === 0) {
           pvRef.current.innerHTML = '<div style="padding:20px; text-align:center; color:#999;">暂无数据</div>'
@@ -311,8 +425,13 @@ function App(){
       chartRef.current = echarts.init(pvRef.current)
     }
 
+    // 获取数据源并应用筛选
+    const ds = getDatasetById(dataset)
+    let filteredRows = ds?.rows || []
+    filteredRows = applyDimensionFilters(filteredRows)
+
     // 获取查询数据
-    const points = runLocalQuery({ dataset, dimensions: dims, metrics: mets }) as any[]
+    const points = runLocalQuery({ dataset, dimensions: dims, metrics: mets, rows: filteredRows }) as any[]
 
     // 构建图表数据
     const names = points.map(p=>p.name)
@@ -522,6 +641,40 @@ function App(){
     setMets(mets.filter(m => m.field.name !== fieldName))
   }
 
+  // 更新维度筛选器配置
+  function updateFilterConfig(dimensionId: string, config: Partial<DateFilterConfig | CategoricalFilterConfig>) {
+    setDimensionFilters(prev => {
+      const newFilters = new Map(prev)
+      const filter = newFilters.get(dimensionId)
+      if (filter) {
+        newFilters.set(dimensionId, {
+          ...filter,
+          config: { ...filter.config, ...config }
+        })
+      }
+      return newFilters
+    })
+  }
+
+  // 切换分类维度值选择
+  function toggleCategoricalValue(dimensionId: string, value: string) {
+    const filter = dimensionFilters.get(dimensionId)
+    if (filter && filter.type === 'categorical') {
+      const config = filter.config as CategoricalFilterConfig
+      const selectedValues = config.selectedValues.includes(value)
+        ? config.selectedValues.filter(v => v !== value)
+        : [...config.selectedValues, value]
+      updateFilterConfig(dimensionId, { selectedValues })
+    }
+  }
+
+  // 获取维度的可用值（用于分类筛选）
+  function getAvailableValues(dimensionId: string): string[] {
+    const ds = getDatasetById(dataset)
+    const rows = ds?.rows || []
+    return Array.from(new Set(rows.map((r: any) => r[dimensionId]).filter((v: any) => v))) as string[]
+  }
+
   function onSave(){
     // 验证数据要求
     const currentChartConfig = CHART_TYPES.find(ct => ct.value === chartType)
@@ -601,26 +754,126 @@ function App(){
                 </div>
               </div>
             </section>
-            <section className='config-preview__bottom'>
-              <div className='row'>
-                <label>图表类型：</label>
-                <div style={{flex: 1}}>
-                  <select
-                    value={chartType}
-                    onChange={e=>setChartType(e.target.value)}
-                    style={{width: '100%'}}
-                  >
-                    {CHART_TYPES.map(ct => (
-                      <option
-                        key={ct.value}
-                        value={ct.value}
-                      >
-                        {ct.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+
+            {/* 维度筛选器和图表类型选择栏 */}
+            <section className='dimension-filter-bar'>
+              {/* 图表类型选择器 - 固定在左侧 */}
+              <div className='chart-type-selector'>
+                <label className='chart-type-label'>图表类型：</label>
+                <select
+                  value={chartType}
+                  onChange={e=>setChartType(e.target.value)}
+                  className='chart-type-select'
+                >
+                  {CHART_TYPES.map(ct => (
+                    <option key={ct.value} value={ct.value}>
+                      {ct.label}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              {/* 维度筛选器 - 靠右侧 */}
+              {dims.length > 0 && dims.map(dim => {
+                const filter = dimensionFilters.get(dim.field.id)
+                if (!filter) return null
+
+                const field = dim.field
+
+                if (filter.type === 'date') {
+                  const config = filter.config as DateFilterConfig
+                  return (
+                    <div key={field.id} className='filter-item'>
+                      <span className='filter-icon'>📅</span>
+                      <select
+                        value={config.granularity}
+                        onChange={e => updateFilterConfig(field.id, { granularity: e.target.value as DateGranularity })}
+                        className='filter-select'
+                      >
+                        <option value="day">日</option>
+                        <option value="week">周</option>
+                        <option value="month">月</option>
+                        <option value="quarter">季</option>
+                        <option value="year">年</option>
+                      </select>
+                      <input
+                        type="date"
+                        value={config.startDate}
+                        onChange={e => updateFilterConfig(field.id, { startDate: e.target.value })}
+                        className='filter-date'
+                      />
+                      <span className='filter-separator'>~</span>
+                      <input
+                        type="date"
+                        value={config.endDate}
+                        onChange={e => updateFilterConfig(field.id, { endDate: e.target.value })}
+                        className='filter-date'
+                      />
+                    </div>
+                  )
+                } else {
+                  const config = filter.config as CategoricalFilterConfig
+                  const availableValues = getAvailableValues(field.id)
+                  const filteredValues = availableValues.filter(v =>
+                    v.toLowerCase().includes(config.searchTerm.toLowerCase())
+                  )
+                  const isOpen = showFilterDropdown === field.id
+
+                  return (
+                    <div key={field.id} className='filter-item'>
+                      <span className='filter-icon'>🔽</span>
+                      <button
+                        className='filter-dropdown-btn'
+                        onClick={() => setShowFilterDropdown(isOpen ? null : field.id)}
+                      >
+                        {field.name} ({config.selectedValues.length}/{availableValues.length})
+                      </button>
+                      {isOpen && (
+                        <div className='filter-dropdown-menu'>
+                          <div className='filter-dropdown-search'>
+                            <input
+                              type="text"
+                              placeholder="搜索..."
+                              value={config.searchTerm}
+                              onChange={e => updateFilterConfig(field.id, { searchTerm: e.target.value })}
+                              className='filter-search-input'
+                            />
+                          </div>
+                          <div className='filter-dropdown-actions'>
+                            <button
+                              onClick={() => updateFilterConfig(field.id, { selectedValues: availableValues })}
+                              className='filter-action-btn'
+                            >
+                              全选
+                            </button>
+                            <button
+                              onClick={() => updateFilterConfig(field.id, { selectedValues: [] })}
+                              className='filter-action-btn'
+                            >
+                              清空
+                            </button>
+                          </div>
+                          <div className='filter-dropdown-list'>
+                            {filteredValues.map(value => (
+                              <label key={value} className='filter-checkbox-label'>
+                                <input
+                                  type="checkbox"
+                                  checked={config.selectedValues.includes(value)}
+                                  onChange={() => toggleCategoricalValue(field.id, value)}
+                                />
+                                <span>{value}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+              })}
+            </section>
+
+            <section className='config-preview__bottom'>
               {(() => {
                 const currentConfig = CHART_TYPES.find(ct => ct.value === chartType)
                 return currentConfig ? (
