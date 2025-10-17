@@ -12,6 +12,7 @@ type DateFilterConfig = {
   granularity: DateGranularity
   startDate: string
   endDate: string
+  aggregateData: boolean
 }
 
 type CategoricalFilterConfig = {
@@ -257,7 +258,8 @@ function App(){
             config: {
               granularity: 'day',
               startDate: sortedDates[0] || '',
-              endDate: sortedDates[sortedDates.length - 1] || ''
+              endDate: sortedDates[sortedDates.length - 1] || '',
+              aggregateData: false
             }
           })
         }
@@ -440,8 +442,47 @@ function App(){
     let filteredRows = ds?.rows || []
     filteredRows = applyDimensionFilters(filteredRows)
 
-    // 获取查询数据
-    const points = runLocalQuery({ dataset, dimensions: dims, metrics: mets, rows: filteredRows }) as any[]
+    // 检查是否启用数据汇总
+    const dateFilters = Array.from(dimensionFilters.values()).filter(f => f.type === 'date')
+    const shouldAggregate = dateFilters.some(f => (f.config as DateFilterConfig).aggregateData)
+
+    let points: any[]
+    if (shouldAggregate && mets.length > 0) {
+      // 数据汇总模式：聚合所有指标
+      points = mets.map(met => {
+        const metId = met.field.id
+        const agg = met.aggregation || met.field.aggregation || 'sum'
+        const values = filteredRows.map((r: any) => Number(r[metId])).filter(v => !isNaN(v))
+
+        let value = 0
+        if (values.length > 0) {
+          switch(agg) {
+            case 'sum':
+              value = values.reduce((a, b) => a + b, 0)
+              break
+            case 'avg':
+              value = values.reduce((a, b) => a + b, 0) / values.length
+              break
+            case 'max':
+              value = Math.max(...values)
+              break
+            case 'min':
+              value = Math.min(...values)
+              break
+            case 'count':
+              value = values.length
+              break
+            default:
+              value = values.reduce((a, b) => a + b, 0)
+          }
+        }
+
+        return { name: met.field.name, value }
+      })
+    } else {
+      // 正常模式：按维度分组
+      points = runLocalQuery({ dataset, dimensions: dims, metrics: mets, rows: filteredRows }) as any[]
+    }
 
     // 构建图表数据
     const names = points.map(p=>p.name)
@@ -902,6 +943,15 @@ function App(){
                         onChange={e => updateFilterConfig(field.id, { endDate: e.target.value })}
                         className='filter-date'
                       />
+                      <label style={{display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, cursor: 'pointer', marginLeft: 6}}>
+                        <input
+                          type="checkbox"
+                          checked={config.aggregateData}
+                          onChange={e => updateFilterConfig(field.id, { aggregateData: e.target.checked })}
+                          style={{cursor: 'pointer'}}
+                        />
+                        <span>数据汇总</span>
+                      </label>
                     </div>
                   )
                 } else {
