@@ -448,39 +448,48 @@ function App(){
 
     let points: any[]
     if (shouldAggregate && mets.length > 0) {
-      // 数据汇总模式：聚合所有指标
-      points = mets.map(met => {
-        const metId = met.field.id
-        const agg = met.aggregation || met.field.aggregation || 'sum'
-        const values = filteredRows.map((r: any) => Number(r[metId])).filter(v => !isNaN(v))
+      // 数据汇总模式：忽略日期维度，保留其他维度进行分组聚合
+      // 过滤掉日期类型的维度
+      const nonDateDims = dims.filter(d => d.field.dataType !== 'date')
 
-        let value = 0
-        if (values.length > 0) {
-          switch(agg) {
-            case 'sum':
-              value = values.reduce((a, b) => a + b, 0)
-              break
-            case 'avg':
-              value = values.reduce((a, b) => a + b, 0) / values.length
-              break
-            case 'max':
-              value = Math.max(...values)
-              break
-            case 'min':
-              value = Math.min(...values)
-              break
-            case 'count':
-              value = values.length
-              break
-            default:
-              value = values.reduce((a, b) => a + b, 0)
+      if (nonDateDims.length === 0) {
+        // 如果没有非日期维度，对所有指标进行全局汇总
+        points = mets.map(met => {
+          const metId = met.field.id
+          const agg = met.aggregation || met.field.aggregation || 'sum'
+          const values = filteredRows.map((r: any) => Number(r[metId])).filter((v: number) => !isNaN(v))
+
+          let value = 0
+          if (values.length > 0) {
+            switch(agg) {
+              case 'sum':
+                value = values.reduce((a: number, b: number) => a + b, 0)
+                break
+              case 'avg':
+                value = values.reduce((a: number, b: number) => a + b, 0) / values.length
+                break
+              case 'max':
+                value = Math.max(...values)
+                break
+              case 'min':
+                value = Math.min(...values)
+                break
+              case 'count':
+                value = values.length
+                break
+              default:
+                value = values.reduce((a: number, b: number) => a + b, 0)
+            }
           }
-        }
 
-        return { name: met.field.name, value }
-      })
+          return { name: met.field.name, value }
+        })
+      } else {
+        // 有非日期维度，按非日期维度分组聚合（忽略日期维度）
+        points = runLocalQuery({ dataset, dimensions: nonDateDims, metrics: mets, rows: filteredRows }) as any[]
+      }
     } else {
-      // 正常模式：按维度分组
+      // 正常模式：按所有维度分组
       points = runLocalQuery({ dataset, dimensions: dims, metrics: mets, rows: filteredRows }) as any[]
     }
 
