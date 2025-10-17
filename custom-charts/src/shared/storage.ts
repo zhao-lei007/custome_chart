@@ -91,6 +91,7 @@ export const WEB_METRICS: Field[] = [
 
 // ==================== 客户满意度数据集字段 ====================
 export const SATISFACTION_DIMENSIONS: Field[] = [
+  { id: 'date', name: '日期', dataType: 'date', description: '调查日期', type:'dimension' },
   { id: 'department', name: '部门', dataType: 'string', description: '服务部门', type:'dimension' },
   { id: 'survey_month', name: '调查月份', dataType: 'date', description: '调查时间', type:'dimension' },
   { id: 'customer_segment', name: '客户类型', dataType: 'string', description: '客户细分', type:'dimension' },
@@ -229,20 +230,29 @@ function generateSatisfactionData() {
   const segments = ['企业客户', '个人客户', '教育机构']
 
   const data = []
-  for(let month = 1; month <= 12; month++) {
-    const monthStr = `2024-${String(month).padStart(2, '0')}`
-    for(const dept of departments) {
-      for(const segment of segments) {
-        data.push({
-          department: dept, survey_month: monthStr, customer_segment: segment,
-          satisfaction_score: parseFloat((Math.random() * 3 + 7).toFixed(1)),
-          response_time: parseFloat((Math.random() * 30 + 5).toFixed(1)),
-          resolution_rate: parseFloat((Math.random() * 20 + 75).toFixed(2)),
-          nps_score: Math.floor(Math.random() * 70 + 20),
-          repeat_rate: parseFloat((Math.random() * 30 + 60).toFixed(2))
-        })
-      }
-    }
+  const startDate = new Date('2024-01-01')
+
+  // 生成90天的数据，每天都有调查记录
+  for(let day = 0; day < 90; day++) {
+    const date = new Date(startDate.getTime() + day * 86400000)
+    const dateStr = date.toISOString().split('T')[0]
+    const monthStr = `2024-${String(date.getMonth() + 1).padStart(2, '0')}`
+
+    // 每天随机选择一些部门和客户类型组合
+    const dept = departments[Math.floor(Math.random() * departments.length)]
+    const segment = segments[Math.floor(Math.random() * segments.length)]
+
+    data.push({
+      date: dateStr,
+      department: dept,
+      survey_month: monthStr,
+      customer_segment: segment,
+      satisfaction_score: parseFloat((Math.random() * 3 + 7).toFixed(1)),
+      response_time: parseFloat((Math.random() * 30 + 5).toFixed(1)),
+      resolution_rate: parseFloat((Math.random() * 20 + 75).toFixed(2)),
+      nps_score: Math.floor(Math.random() * 70 + 20),
+      repeat_rate: parseFloat((Math.random() * 30 + 60).toFixed(2))
+    })
   }
   return data
 }
