@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import * as echarts from 'echarts'
+import ExcelJS from 'exceljs'
 import { ensureInit, getCharts, getDatasetById, getAllDatasets, runLocalQuery, saveChart, uid, type QueryField, type Field } from '@/shared/storage'
 import '@/styles/editor.css'
 import chinaGeoJSON from '@/assets/china.json'
@@ -204,10 +205,12 @@ function App(){
   const [datasetSearchTerm, setDatasetSearchTerm] = useState('')
   const [dimensionSearchTerm, setDimensionSearchTerm] = useState('')
   const [metricSearchTerm, setMetricSearchTerm] = useState('')
+  const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false)
   const idRef = useRef<string| null>(null)
 
   const pvRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<echarts.EChartsType | null>(null)
+  const downloadDropdownRef = useRef<HTMLDivElement>(null)
 
   // Load all datasets on mount
   useEffect(() => {
@@ -334,6 +337,23 @@ function App(){
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  // 点击外部关闭下载下拉菜单
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (downloadDropdownRef.current && !downloadDropdownRef.current.contains(e.target as Node)) {
+        setDownloadDropdownOpen(false)
+      }
+    }
+
+    if (downloadDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [downloadDropdownOpen])
 
   // 验证当前选择的维度和指标是否符合图表类型要求
   useEffect(() => {
@@ -740,6 +760,167 @@ function App(){
     return Array.from(new Set(rows.map((r: any) => r[dimensionId]).filter((v: any) => v))) as string[]
   }
 
+  // 下载图表
+  function downloadChart(format: 'png' | 'jpeg') {
+    const tableTypes = ['table', 'pivot-table', 'trend-analysis', 'okr-table', 'raw-data-table']
+
+    // 表格类型不支持下载
+    if (tableTypes.includes(chartType)) {
+      alert('表格类型暂不支持下载，请使用图表类型')
+      return
+    }
+
+    // 检查是否有图表实例
+    if (!chartRef.current) {
+      alert('请先配置并预览图表')
+      return
+    }
+
+    try {
+      // 使用 ECharts 的 getDataURL 方法获取图片
+      const url = chartRef.current.getDataURL({
+        type: format,
+        pixelRatio: 2,
+        backgroundColor: '#fff'
+      })
+
+      // 创建下载链接
+      const link = document.createElement('a')
+      link.href = url
+      const fileExtension = format === 'jpeg' ? 'jpg' : format
+      link.download = `${name || '图表'}_${new Date().toISOString().slice(0, 10)}.${fileExtension}`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (error) {
+      console.error('下载失败:', error)
+      alert('下载失败，请稍后重试')
+    }
+  }
+
+  // 下载为 Excel 文件（包含图表和数据）
+  async function downloadExcel() {
+    const tableTypes = ['table', 'pivot-table', 'trend-analysis', 'okr-table', 'raw-data-table']
+
+    try {
+      const workbook = new ExcelJS.Workbook()
+
+      // 对于表格类型，只导出数据表
+      if (tableTypes.includes(chartType)) {
+        const ds = getDatasetById(dataset)
+        let rows = ds?.rows || []
+        rows = applyDimensionFilters(rows)
+
+        if (rows.length === 0) {
+          alert('没有数据可导出')
+          return
+        }
+
+        const worksheet = workbook.addWorksheet('数据')
+
+        // 添加表头和数据
+        const headers = Object.keys(rows[0])
+        worksheet.addRow(headers)
+
+        // 样式化表头
+        worksheet.getRow(1).font = { bold: true }
+        worksheet.getRow(1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' }
+        }
+
+        // 添加数据行（限制 10000 行）
+        rows.slice(0, 10000).forEach((row: any) => {
+          worksheet.addRow(headers.map(h => row[h]))
+        })
+
+        // 自动调整列宽
+        worksheet.columns.forEach(column => {
+          column.width = 15
+        })
+      } else {
+        // 对于图表类型，导出图表图片 + 数据表
+        if (!chartRef.current) {
+          alert('请先配置并预览图表')
+          return
+        }
+
+        // 获取图表图片
+        const imageDataUrl = chartRef.current.getDataURL({
+          type: 'png',
+          pixelRatio: 2,
+          backgroundColor: '#fff'
+        })
+        const imageBase64 = imageDataUrl.split(',')[1] // 移除 data:image/png;base64, 前缀
+
+        // Sheet 1: 图表
+        const chartSheet = workbook.addWorksheet('图表')
+        const imageId = workbook.addImage({
+          base64: imageBase64,
+          extension: 'png'
+        })
+        chartSheet.addImage(imageId, {
+          tl: { col: 1, row: 1 },
+          ext: { width: 800, height: 500 }
+        })
+
+        // Sheet 2: 数据
+        const ds = getDatasetById(dataset)
+        let filteredRows = ds?.rows || []
+        filteredRows = applyDimensionFilters(filteredRows)
+
+        const dataSheet = workbook.addWorksheet('数据')
+
+        // 构建表头
+        const headers: string[] = []
+        const dimFields = dims.map(d => d.field)
+        const metFields = mets.map(m => m.field)
+
+        dimFields.forEach(f => headers.push(f.name))
+        metFields.forEach(f => headers.push(f.name))
+
+        dataSheet.addRow(headers)
+
+        // 样式化表头
+        dataSheet.getRow(1).font = { bold: true }
+        dataSheet.getRow(1).fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FFE0E0E0' }
+        }
+
+        // 添加数据行（限制 10000 行）
+        filteredRows.slice(0, 10000).forEach((row: any) => {
+          const rowData: any[] = []
+          dimFields.forEach(f => rowData.push(row[f.id]))
+          metFields.forEach(f => rowData.push(row[f.id]))
+          dataSheet.addRow(rowData)
+        })
+
+        // 自动调整列宽
+        dataSheet.columns.forEach(column => {
+          column.width = 15
+        })
+      }
+
+      // 生成 Excel 文件并下载
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${name || '图表'}_${new Date().toISOString().slice(0, 10)}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Excel导出失败:', error)
+      alert('Excel导出失败，请稍后重试')
+    }
+  }
+
   function onSave(){
     // 验证数据要求
     const currentChartConfig = CHART_TYPES.find(ct => ct.value === chartType)
@@ -961,6 +1142,123 @@ function App(){
                         />
                         <span>数据汇总</span>
                       </label>
+                      {/* 下载按钮（下拉菜单） */}
+                      <div
+                        ref={downloadDropdownRef}
+                        style={{
+                          position: 'relative',
+                          marginLeft: 12
+                        }}
+                      >
+                        <button
+                          onClick={() => setDownloadDropdownOpen(!downloadDropdownOpen)}
+                          className='btn'
+                          style={{
+                            fontSize: 13,
+                            padding: '4px 12px',
+                            background: '#1890ff',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6
+                          }}
+                          title="下载图表"
+                        >
+                          📥 下载图表 {downloadDropdownOpen ? '▲' : '▼'}
+                        </button>
+
+                        {downloadDropdownOpen && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              top: '100%',
+                              left: 0,
+                              marginTop: 4,
+                              background: '#fff',
+                              border: '1px solid #d9d9d9',
+                              borderRadius: '4px',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                              zIndex: 1000,
+                              minWidth: 120
+                            }}
+                          >
+                            <button
+                              onClick={() => {
+                                downloadChart('png')
+                                setDownloadDropdownOpen(false)
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '8px 12px',
+                                background: 'transparent',
+                                border: 'none',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                fontSize: 13,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                transition: 'background 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              🖼️ PNG 格式
+                            </button>
+                            <button
+                              onClick={() => {
+                                downloadChart('jpeg')
+                                setDownloadDropdownOpen(false)
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '8px 12px',
+                                background: 'transparent',
+                                border: 'none',
+                                borderTop: '1px solid #f0f0f0',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                fontSize: 13,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                transition: 'background 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              📷 JPG 格式
+                            </button>
+                            <button
+                              onClick={() => {
+                                downloadExcel()
+                                setDownloadDropdownOpen(false)
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '8px 12px',
+                                background: 'transparent',
+                                border: 'none',
+                                borderTop: '1px solid #f0f0f0',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                fontSize: 13,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 8,
+                                transition: 'background 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              📊 Excel 格式
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )
                 } else {
