@@ -435,7 +435,55 @@ export function ensureInit(){
     ]
     storage.save(STORAGE_KEYS.DATASETS, datasets)
   }
-  if(!localStorage.getItem(STORAGE_KEYS.CHARTS)) storage.save(STORAGE_KEYS.CHARTS, [])
+
+  // 预制演示图表
+  if(!localStorage.getItem(STORAGE_KEYS.CHARTS)) {
+    const demoCharts: Chart[] = [
+      {
+        id: 'demo_chart_traffic_trend',
+        name: '页面浏览量趋势',
+        creator: '系统',
+        createdAt: '2024-09-15T10:00:00.000Z',
+        updatedAt: '2024-09-15T10:00:00.000Z',
+        dataSource: 'web_traffic',
+        publishStatus: 'published',
+        chartType: 'line',
+        tags: ['流量分析', '趋势'],
+        order: 1,
+        query: {
+          dataset: 'web_traffic',
+          dimensions: [{ field: WEB_DIMENSIONS[0] }], // 日期
+          metrics: [{ field: WEB_METRICS[0], aggregation: 'sum' }], // 页面浏览量
+          filters: [],
+          config: {}
+        },
+        config: {},
+        previewImage: null
+      },
+      {
+        id: 'demo_chart_traffic_source',
+        name: '流量来源分布',
+        creator: '系统',
+        createdAt: '2024-09-14T10:00:00.000Z',
+        updatedAt: '2024-09-14T10:00:00.000Z',
+        dataSource: 'web_traffic',
+        publishStatus: 'published',
+        chartType: 'pie',
+        tags: ['流量分析', '来源'],
+        order: 2,
+        query: {
+          dataset: 'web_traffic',
+          dimensions: [{ field: WEB_DIMENSIONS[1] }], // 流量来源
+          metrics: [{ field: WEB_METRICS[1], aggregation: 'sum' }], // 独立访客
+          filters: [],
+          config: {}
+        },
+        config: {},
+        previewImage: null
+      }
+    ]
+    storage.save(STORAGE_KEYS.CHARTS, demoCharts)
+  }
 }
 
 export function uid(prefix='id'){ return `${prefix}_${Math.random().toString(36).slice(2,8)}_${Date.now().toString(36)}` }
