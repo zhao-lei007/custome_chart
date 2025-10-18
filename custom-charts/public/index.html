@@ -70,7 +70,7 @@
     window.fetch = (input, init={}) => {
       try{
         const u = typeof input==='string' ? input : (input&&input.url)||'';
-        if (/.(css|js|png|jpe?g|gif|svg|woff2?|ttf|eot)(?|$)/i.test(u)) {
+        if (/\.(css|js|png|jpe?g|gif|svg|woff2?|ttf|eot)(\?|$)/i.test(u)) {
           return realFetch ? realFetch(input, init) : Promise.resolve(new Response('', {status:200}));
         }
         return Promise.resolve(new Response(JSON.stringify({ code:0, data:[], msg:'offline' }), { status:200, headers: { 'Content-Type':'application/json' } }));
