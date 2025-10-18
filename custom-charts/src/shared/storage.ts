@@ -458,7 +458,7 @@ export function ensureInit(){
           config: {}
         },
         config: {},
-        previewImage: null
+        previewImage: './line.png'
       },
       {
         id: 'demo_chart_traffic_source',
@@ -479,7 +479,7 @@ export function ensureInit(){
           config: {}
         },
         config: {},
-        previewImage: null
+        previewImage: './pie.png'
       }
     ]
     storage.save(STORAGE_KEYS.CHARTS, demoCharts)
