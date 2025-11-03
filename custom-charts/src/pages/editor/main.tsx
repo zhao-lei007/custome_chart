@@ -259,23 +259,20 @@ function App(){
       const field = dim.field
       if (field.dataType === 'date') {
         // 日期类型维度 - 初始化日期筛选器
-        const existingFilter = dimensionFilters.get(field.id)
-        if (existingFilter && existingFilter.type === 'date') {
-          newFilters.set(field.id, existingFilter)
-        } else {
-          const dateValues = rows.map((r: any) => r[field.id]).filter((v: any) => v)
-          const sortedDates = dateValues.sort()
-          newFilters.set(field.id, {
-            dimensionId: field.id,
-            type: 'date',
-            config: {
-              granularity: 'day',
-              startDate: sortedDates[0] || '',
-              endDate: sortedDates[sortedDates.length - 1] || '',
-              aggregateData: false
-            }
-          })
-        }
+        // 从当前数据集获取实际的日期范围
+        const dateValues = rows.map((r: any) => r[field.id]).filter((v: any) => v)
+        const sortedDates = dateValues.sort()
+
+        newFilters.set(field.id, {
+          dimensionId: field.id,
+          type: 'date',
+          config: {
+            granularity: 'day',
+            startDate: sortedDates[0] || '',
+            endDate: sortedDates[sortedDates.length - 1] || '',
+            aggregateData: false
+          }
+        })
       } else {
         // 分类类型维度 - 初始化多选筛选器
         const existingFilter = dimensionFilters.get(field.id)
