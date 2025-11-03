@@ -649,8 +649,13 @@ function App(){
           return
         }
 
-        // 获取表头（使用第一行的键）
-        const headers = Object.keys(rows[0])
+        // 构建表头 - 按维度和指标的顺序
+        const headers: Array<{id: string, name: string}> = []
+        dims.forEach(d => headers.push({id: d.field.id, name: d.field.name}))
+        mets.forEach(m => headers.push({id: m.field.id, name: m.field.name}))
+
+        // 如果没有选择任何维度或指标，使用数据的所有字段
+        const finalHeaders = headers.length > 0 ? headers : Object.keys(rows[0]).map(k => ({id: k, name: k}))
 
         // 生成表格HTML
         const tableHTML = `
@@ -658,14 +663,14 @@ function App(){
             <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
               <thead>
                 <tr style="background: #f5f5f5; position: sticky; top: 0;">
-                  ${headers.map(h => `<th style="padding: 8px; border: 1px solid #e0e0e0; text-align: left; font-weight: 600;">${h}</th>`).join('')}
+                  ${finalHeaders.map(h => `<th style="padding: 8px; border: 1px solid #e0e0e0; text-align: left; font-weight: 600;">${h.name}</th>`).join('')}
                 </tr>
               </thead>
               <tbody>
                 ${rows.slice(0, 100).map((row: any) => `
                   <tr style="border-bottom: 1px solid #f0f0f0;">
-                    ${headers.map(h => {
-                      const value = row[h]
+                    ${finalHeaders.map(h => {
+                      const value = row[h.id]
                       const displayValue = value === null || value === undefined ? '-' : String(value)
                       return `<td style="padding: 8px; border: 1px solid #e0e0e0;">${displayValue}</td>`
                     }).join('')}
@@ -946,6 +951,49 @@ function App(){
 
   function addDim(f:any){ if(!dims.find(d=>d.field.id===f.id)) setDims([...dims, { field:f } as QueryField ]) }
   function addMet(f:any){ if(!mets.find(m=>m.field.id===f.id)) setMets([...mets, { field:f, aggregation: (f.aggregation||'sum') as QueryField['aggregation'] } as QueryField ]) }
+
+  // 拖拽排序处理函数
+  function handleDimDragStart(e: React.DragEvent, index: number) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(index))
+  }
+
+  function handleDimDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  function handleDimDrop(e: React.DragEvent, dropIndex: number) {
+    e.preventDefault()
+    const dragIndex = parseInt(e.dataTransfer.getData('text/plain'))
+    if (dragIndex === dropIndex) return
+
+    const newDims = [...dims]
+    const [removed] = newDims.splice(dragIndex, 1)
+    newDims.splice(dropIndex, 0, removed)
+    setDims(newDims)
+  }
+
+  function handleMetDragStart(e: React.DragEvent, index: number) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(index))
+  }
+
+  function handleMetDragOver(e: React.DragEvent) {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  function handleMetDrop(e: React.DragEvent, dropIndex: number) {
+    e.preventDefault()
+    const dragIndex = parseInt(e.dataTransfer.getData('text/plain'))
+    if (dragIndex === dropIndex) return
+
+    const newMets = [...mets]
+    const [removed] = newMets.splice(dragIndex, 1)
+    newMets.splice(dropIndex, 0, removed)
+    setMets(newMets)
+  }
   function removeDim(e: React.MouseEvent, field: Field){
     // 禁止删除日期维度（必选项）
     if (field.dataType === 'date') {
@@ -1300,8 +1348,16 @@ function App(){
               <div className='field-selector-row'>
                 <div className='field-label'><strong>维度</strong></div>
                 <div id='pickedDims' className='picked-fields'>
-                  {dims.map(d=> (
-                    <span key={d.field.id} className='pill pill-selected'>
+                  {dims.map((d, index)=> (
+                    <span
+                      key={d.field.id}
+                      className='pill pill-selected'
+                      draggable
+                      onDragStart={(e) => handleDimDragStart(e, index)}
+                      onDragOver={handleDimDragOver}
+                      onDrop={(e) => handleDimDrop(e, index)}
+                      style={{cursor: 'move'}}
+                    >
                       {d.field.dataType === 'date' && '🔒 '}
                       {d.field.name}
                       {d.field.dataType !== 'date' && <button className='btn' onClick={(e) => removeDim(e, d.field)}>×</button>}
@@ -1312,7 +1368,20 @@ function App(){
               <div className='field-selector-row' style={{marginTop:8}}>
                 <div className='field-label'><strong>指标</strong></div>
                 <div id='pickedMets' className='picked-fields'>
-                  {mets.map(m=> <span key={m.field.id} className='pill pill-selected'>{m.field.name}<button className='btn' onClick={removeMet}>×</button></span>)}
+                  {mets.map((m, index)=> (
+                    <span
+                      key={m.field.id}
+                      className='pill pill-selected'
+                      draggable
+                      onDragStart={(e) => handleMetDragStart(e, index)}
+                      onDragOver={handleMetDragOver}
+                      onDrop={(e) => handleMetDrop(e, index)}
+                      style={{cursor: 'move'}}
+                    >
+                      {m.field.name}
+                      <button className='btn' onClick={removeMet}>×</button>
+                    </span>
+                  ))}
                 </div>
               </div>
             </section>
