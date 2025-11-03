@@ -152,6 +152,20 @@ export const FUNNEL_METRICS: Field[] = [
   { id: 'roi', name: 'ROI', dataType: 'number', description: '投资回报率(%)', aggregation: 'avg', type:'metric' },
 ]
 
+// ==================== 树形表格数据集字段 ====================
+export const TREE_TABLE_DIMENSIONS: Field[] = [
+  { id: 'date', name: '日期', dataType: 'date', description: '统计日期', type:'dimension' },
+  { id: 'region', name: '大区', dataType: 'string', description: '销售大区', type:'dimension' },
+  { id: 'province', name: '省份', dataType: 'string', description: '省份名称', type:'dimension' },
+  { id: 'city', name: '城市', dataType: 'string', description: '城市名称', type:'dimension' },
+]
+
+export const TREE_TABLE_METRICS: Field[] = [
+  { id: 'sales', name: '销售额', dataType: 'number', description: '总销售额(元)', aggregation: 'sum', type:'metric' },
+  { id: 'orders', name: '订单数', dataType: 'number', description: '订单总数(笔)', aggregation: 'sum', type:'metric' },
+  { id: 'avg_price', name: '客单价', dataType: 'number', description: '平均订单金额(元)', aggregation: 'avg', type:'metric' },
+]
+
 export const storage = {
   save<T>(key: string, data: T){ localStorage.setItem(key, JSON.stringify(data)) },
   load<T>(key: string, def: T): T { try{ const v = localStorage.getItem(key); return v? JSON.parse(v): def }catch(e){ return def } },
@@ -366,6 +380,68 @@ function generateFunnelData() {
   return data
 }
 
+function generateTreeTableData() {
+  // 定义三层层级结构：大区 -> 省份 -> 城市
+  const hierarchy = {
+    "华东": {
+      "江苏省": ["南京市", "苏州市", "无锡市"],
+      "浙江省": ["杭州市", "宁波市", "温州市"],
+      "上海市": ["上海市"],
+      "安徽省": ["合肥市", "芜湖市"]
+    },
+    "华南": {
+      "广东省": ["广州市", "深圳市", "东莞市", "佛山市"],
+      "福建省": ["福州市", "厦门市"],
+      "广西壮族自治区": ["南宁市", "桂林市"]
+    },
+    "华北": {
+      "北京市": ["北京市"],
+      "河北省": ["石家庄市", "唐山市", "保定市"],
+      "天津市": ["天津市"],
+      "山西省": ["太原市"]
+    },
+    "西部": {
+      "四川省": ["成都市", "绵阳市"],
+      "陕西省": ["西安市", "咸阳市"],
+      "重庆市": ["重庆市"],
+      "云南省": ["昆明市"]
+    }
+  }
+
+  const data = []
+  const startDate = new Date('2024-01-01')
+
+  // 为每个城市生成90天的数据
+  for(let day = 0; day < 90; day++) {
+    const date = new Date(startDate.getTime() + day * 86400000)
+    const dateStr = date.toISOString().split('T')[0]
+
+    for (const [region, provinces] of Object.entries(hierarchy)) {
+      for (const [province, cities] of Object.entries(provinces)) {
+        for (const city of cities) {
+          // 生成随机销售数据，确保有一定的层级关系（同省份的城市销售额相近）
+          const baseSales = Math.floor(Math.random() * 50000) + 30000  // 每日销售额
+          const sales = baseSales + Math.floor(Math.random() * 20000)
+          const orders = Math.floor(sales / (Math.random() * 500 + 1200)) // 客单价在1200-1700之间
+          const avg_price = parseFloat((sales / orders).toFixed(2))
+
+          data.push({
+            date: dateStr,
+            region,
+            province,
+            city,
+            sales,
+            orders,
+            avg_price
+          })
+        }
+      }
+    }
+  }
+
+  return data
+}
+
 export function ensureInit(){
   if(!localStorage.getItem(STORAGE_KEYS.DATASETS)){
     const datasets = [
@@ -431,6 +507,15 @@ export function ensureInit(){
         lastModified:new Date().toISOString(),
         category:'营销',
         rows: generateFunnelData()
+      },
+      {
+        id:'regional_sales',
+        name:'区域销售数据（树形）',
+        description:'按大区-省份-城市三级层级展示的销售数据',
+        fields:[...TREE_TABLE_DIMENSIONS, ...TREE_TABLE_METRICS],
+        lastModified:new Date().toISOString(),
+        category:'销售',
+        rows: generateTreeTableData()
       }
     ]
     storage.save(STORAGE_KEYS.DATASETS, datasets)

@@ -99,6 +99,13 @@ const CHART_TYPES: ChartTypeConfig[] = [
     validate: (dims, mets) => (dims >= 1) || (mets >= 1)
   },
   {
+    value: 'tree-table',
+    label: '树形表格 (Tree Table)',
+    dataRequirement: '2个或多个维度（按层级顺序） + 1个或多个指标',
+    scenario: '按层级结构展示维度交叉分析，支持展开/折叠，显示小计和总计',
+    validate: (dims, mets) => dims >= 2 && dims <= 5 && mets >= 1
+  },
+  {
     value: 'stacked-column',
     label: '堆叠柱状图 (Stacked Column Chart)',
     dataRequirement: '1个或多个维度 + 1个或多个指标',
@@ -212,6 +219,9 @@ function App(){
   const chartRef = useRef<echarts.EChartsType | null>(null)
   const downloadDropdownRef = useRef<HTMLDivElement>(null)
 
+  // 树形表格状态管理
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
+
   // Load all datasets on mount
   useEffect(() => {
     const allDatasets = getAllDatasets()
@@ -324,7 +334,7 @@ function App(){
     return () => window.removeEventListener('message', handleMessage)
   },[])
 
-  useEffect(()=>{ draw() },[dataset, dims, mets, chartType, dimensionFilters])
+  useEffect(()=>{ draw() },[dataset, dims, mets, chartType, dimensionFilters, expandedKeys])
 
   // 点击外部关闭筛选器下拉菜单
   useEffect(() => {
@@ -391,7 +401,238 @@ function App(){
     })
   }
 
+  // 树形表格数据结构类型
+  type TreeNode = {
+    key: string
+    level: number
+    dimensionValue: string
+    dimensionName: string
+    metrics: Record<string, number>
+    children: TreeNode[]
+  }
+
+  // 构建树形数据结构
+  function buildTreeData(rows: any[], dimensions: QueryField[], metrics: QueryField[]): TreeNode[] {
+    if (dimensions.length === 0 || rows.length === 0) return []
+
+    // 递归构建树形结构
+    function buildLevel(data: any[], dimIndex: number, parentKey: string = ''): TreeNode[] {
+      if (dimIndex >= dimensions.length) return []
+
+      const currentDim = dimensions[dimIndex]
+      const dimId = currentDim.field.id
+      const dimName = currentDim.field.name
+
+      // 按当前维度分组
+      const grouped = new Map<string, any[]>()
+      data.forEach(row => {
+        const value = String(row[dimId] || '')
+        if (!grouped.has(value)) {
+          grouped.set(value, [])
+        }
+        grouped.get(value)!.push(row)
+      })
+
+      // 构建当前层级的节点
+      const nodes: TreeNode[] = []
+      grouped.forEach((groupRows, dimValue) => {
+        const key = parentKey ? `${parentKey}-${dimValue}` : dimValue
+
+        // 计算当前节点的指标聚合值
+        const nodeMetrics: Record<string, number> = {}
+        metrics.forEach(met => {
+          const metId = met.field.id
+          const agg = met.aggregation || met.field.aggregation || 'sum'
+          const values = groupRows.map(r => Number(r[metId])).filter(v => !isNaN(v))
+
+          let value = 0
+          if (values.length > 0) {
+            switch(agg) {
+              case 'sum':
+                value = values.reduce((a, b) => a + b, 0)
+                break
+              case 'avg':
+                value = values.reduce((a, b) => a + b, 0) / values.length
+                break
+              case 'max':
+                value = Math.max(...values)
+                break
+              case 'min':
+                value = Math.min(...values)
+                break
+              case 'count':
+                value = values.length
+                break
+              default:
+                value = values.reduce((a, b) => a + b, 0)
+            }
+          }
+          nodeMetrics[metId] = value
+        })
+
+        // 递归构建子节点
+        const children = buildLevel(groupRows, dimIndex + 1, key)
+
+        nodes.push({
+          key,
+          level: dimIndex,
+          dimensionValue: dimValue,
+          dimensionName: dimName,
+          metrics: nodeMetrics,
+          children
+        })
+      })
+
+      return nodes
+    }
+
+    return buildLevel(rows, 0)
+  }
+
+  // 渲染树形表格节点为HTML
+  function renderTreeNode(node: TreeNode, metrics: QueryField[], isExpanded: boolean): string {
+    const indent = node.level * 20 // 每层缩进20px
+    const hasChildren = node.children.length > 0
+    const expandIcon = hasChildren
+      ? (isExpanded ? '▼' : '▶')
+      : '　'
+
+    // 格式化指标值
+    const formatValue = (value: number) => {
+      if (value === 0) return '0'
+      if (Math.abs(value) >= 1000000) {
+        return (value / 1000000).toFixed(2) + 'M'
+      }
+      if (Math.abs(value) >= 1000) {
+        return (value / 1000).toFixed(2) + 'K'
+      }
+      return value.toFixed(2)
+    }
+
+    let html = `
+      <tr data-key="${node.key}" style="border-bottom: 1px solid #f0f0f0;">
+        <td style="padding: 8px; border: 1px solid #e0e0e0;">
+          <div style="display: flex; align-items: center; padding-left: ${indent}px;">
+            ${hasChildren ? `<span class="tree-expand-icon" data-key="${node.key}" style="cursor: pointer; margin-right: 4px; user-select: none; color: #1890ff;">${expandIcon}</span>` : `<span style="margin-right: 4px;">${expandIcon}</span>`}
+            <span>${node.dimensionValue}</span>
+          </div>
+        </td>
+        ${metrics.map(met => {
+          const value = node.metrics[met.field.id] || 0
+          return `<td style="padding: 8px; border: 1px solid #e0e0e0; text-align: right; font-family: 'Monaco', monospace;">${formatValue(value)}</td>`
+        }).join('')}
+      </tr>
+    `
+
+    // 如果展开且有子节点，递归渲染子节点
+    if (isExpanded && hasChildren) {
+      node.children.forEach(child => {
+        html += renderTreeNode(child, metrics, expandedKeys.has(child.key))
+      })
+    }
+
+    return html
+  }
+
   function draw(){
+    // 处理树形表格类型
+    if (chartType === 'tree-table') {
+      // 销毁ECharts实例（如果存在）
+      if(chartRef.current){
+        chartRef.current.dispose()
+        chartRef.current = null
+      }
+
+      if(pvRef.current){
+        const ds = getDatasetById(dataset)
+        let rows = ds?.rows || []
+        rows = applyDimensionFilters(rows)
+
+        // 验证数据和配置
+        if (rows.length === 0) {
+          pvRef.current.innerHTML = '<div style="padding:20px; text-align:center; color:#999;">暂无数据</div>'
+          return
+        }
+
+        if (dims.length < 2) {
+          pvRef.current.innerHTML = '<div style="padding:20px; text-align:center; color:#999;">树形表格至少需要2个维度</div>'
+          return
+        }
+
+        if (mets.length === 0) {
+          pvRef.current.innerHTML = '<div style="padding:20px; text-align:center; color:#999;">树形表格至少需要1个指标</div>'
+          return
+        }
+
+        // 构建树形数据
+        const treeData = buildTreeData(rows, dims, mets)
+
+        if (treeData.length === 0) {
+          pvRef.current.innerHTML = '<div style="padding:20px; text-align:center; color:#999;">无法构建树形结构</div>'
+          return
+        }
+
+        // 计算总计
+        const totals: Record<string, number> = {}
+        mets.forEach(met => {
+          const metId = met.field.id
+          totals[metId] = treeData.reduce((sum, node) => sum + (node.metrics[metId] || 0), 0)
+        })
+
+        // 生成表格HTML
+        const tableHTML = `
+          <div style="overflow: auto; max-height: 600px;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+              <thead>
+                <tr style="background: #f5f5f5; position: sticky; top: 0;">
+                  <th style="padding: 8px; border: 1px solid #e0e0e0; text-align: left; font-weight: 600;">维度层级</th>
+                  ${mets.map(met => `<th style="padding: 8px; border: 1px solid #e0e0e0; text-align: right; font-weight: 600;">${met.field.name}</th>`).join('')}
+                </tr>
+              </thead>
+              <tbody>
+                ${treeData.map(node => renderTreeNode(node, mets, expandedKeys.has(node.key))).join('')}
+                <tr style="background: #f0f0f0; font-weight: 700; border-top: 2px solid #d0d0d0;">
+                  <td style="padding: 8px; border: 1px solid #e0e0e0;">总计</td>
+                  ${mets.map(met => {
+                    const value = totals[met.field.id] || 0
+                    const formatValue = (v: number) => {
+                      if (v === 0) return '0'
+                      if (Math.abs(v) >= 1000000) return (v / 1000000).toFixed(2) + 'M'
+                      if (Math.abs(v) >= 1000) return (v / 1000).toFixed(2) + 'K'
+                      return v.toFixed(2)
+                    }
+                    return `<td style="padding: 8px; border: 1px solid #e0e0e0; text-align: right; font-family: 'Monaco', monospace;">${formatValue(value)}</td>`
+                  }).join('')}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        `
+        pvRef.current.innerHTML = tableHTML
+
+        // 添加展开/折叠事件监听
+        const expandIcons = pvRef.current.querySelectorAll('.tree-expand-icon')
+        expandIcons.forEach(icon => {
+          icon.addEventListener('click', (e) => {
+            const target = e.target as HTMLElement
+            const key = target.getAttribute('data-key')
+            if (key) {
+              setExpandedKeys(prev => {
+                const next = new Set(prev)
+                if (next.has(key)) {
+                  next.delete(key)
+                } else {
+                  next.add(key)
+                }
+                return next
+              })
+            }
+          })
+        })
+      }
+      return
+    }
+
     // 处理所有表格类型 - 渲染HTML表格
     const tableTypes = ['table', 'pivot-table', 'trend-analysis', 'okr-table', 'raw-data-table']
     if(tableTypes.includes(chartType)){
