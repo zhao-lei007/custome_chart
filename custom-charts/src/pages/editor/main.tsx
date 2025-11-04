@@ -222,6 +222,9 @@ function App(){
   const [formulaNodes, setFormulaNodes] = useState<FormulaNode[]>([])
   const [selectedOperator, setSelectedOperator] = useState<OperatorType>('add')
 
+  // 自定义维度分组相关状态
+  const [showCustomDimensionGroupModal, setShowCustomDimensionGroupModal] = useState(false)
+
   const pvRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<echarts.EChartsType | null>(null)
   const downloadDropdownRef = useRef<HTMLDivElement>(null)
@@ -1458,7 +1461,27 @@ function App(){
             <div style={{fontSize: 12, color: '#666', marginTop: 4, marginBottom: 12}}>
               {getDatasetById(dataset)?.description || ''}
             </div>
-            <h4>维度</h4>
+            <div>
+              <h4 style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
+                <span>维度</span>
+                <button
+                  onClick={() => setShowCustomDimensionGroupModal(true)}
+                  className='btn'
+                  style={{
+                    fontSize: 12,
+                    padding: '4px 8px',
+                    background: '#fa8c16',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                  title="自定义维度分组"
+                >
+                  + 自定义维度分组
+                </button>
+              </h4>
+            </div>
             <input
               type="text"
               placeholder="搜索维度..."
@@ -2127,6 +2150,57 @@ function App(){
                 确定
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 自定义维度分组提示模态框 */}
+      {showCustomDimensionGroupModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999
+          }}
+          onClick={() => setShowCustomDimensionGroupModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '8px',
+              padding: '24px',
+              width: '400px',
+              maxWidth: '90%',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              textAlign: 'center'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{margin: '0 0 16px 0', fontSize: 18, color: '#333'}}>自定义维度分组</h3>
+            <p style={{fontSize: 14, color: '#666', lineHeight: '1.6', margin: '0 0 20px 0'}}>
+              点击后新开 tab 跳转自定义维度分组页面
+            </p>
+            <button
+              onClick={() => setShowCustomDimensionGroupModal(false)}
+              style={{
+                padding: '8px 24px',
+                background: '#1890ff',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: 14
+              }}
+            >
+              知道了
+            </button>
           </div>
         </div>
       )}
