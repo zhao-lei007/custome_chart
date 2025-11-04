@@ -1470,7 +1470,7 @@ function App(){
                   style={{
                     fontSize: 12,
                     padding: '4px 8px',
-                    background: '#fa8c16',
+                    background: '#1890ff',
                     color: '#fff',
                     border: 'none',
                     borderRadius: '4px',
@@ -1517,7 +1517,7 @@ function App(){
                 style={{
                   fontSize: 12,
                   padding: '4px 8px',
-                  background: '#52c41a',
+                  background: '#1890ff',
                   color: '#fff',
                   border: 'none',
                   borderRadius: '4px',
