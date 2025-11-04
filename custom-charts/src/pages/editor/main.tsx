@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import * as echarts from 'echarts'
 import ExcelJS from 'exceljs'
-import { ensureInit, getCharts, getDatasetById, getAllDatasets, runLocalQuery, saveChart, uid, type QueryField, type Field } from '@/shared/storage'
+import { ensureInit, getCharts, getDatasetById, getAllDatasets, runLocalQuery, saveChart, uid, evaluateFormula, formulaToString, type QueryField, type Field, type CustomMetricDefinition, type FormulaNode, type OperatorType } from '@/shared/storage'
 import '@/styles/editor.css'
 import chinaGeoJSON from '@/assets/china.json'
 
@@ -215,6 +215,13 @@ function App(){
   const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false)
   const idRef = useRef<string| null>(null)
 
+  // 自定义指标相关状态
+  const [customMetrics, setCustomMetrics] = useState<CustomMetricDefinition[]>([])
+  const [showCustomMetricModal, setShowCustomMetricModal] = useState(false)
+  const [customMetricName, setCustomMetricName] = useState('')
+  const [formulaNodes, setFormulaNodes] = useState<FormulaNode[]>([])
+  const [selectedOperator, setSelectedOperator] = useState<OperatorType>('add')
+
   const pvRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<echarts.EChartsType | null>(null)
   const downloadDropdownRef = useRef<HTMLDivElement>(null)
@@ -315,6 +322,10 @@ function App(){
       setChartType((c.chartType as any) || 'bar')
       setDims((c.query?.dimensions||[]) as QueryField[])
       setMets((c.query?.metrics||[]) as QueryField[])
+      // 恢复自定义指标
+      if(c.query?.customMetrics && Array.isArray(c.query.customMetrics)) {
+        setCustomMetrics(c.query.customMetrics as CustomMetricDefinition[])
+      }
     }
 
     // Load from URL params
@@ -705,19 +716,25 @@ function App(){
     let filteredRows = ds?.rows || []
     filteredRows = applyDimensionFilters(filteredRows)
 
+    // 分离基础指标和自定义指标
+    const baseMetrics = mets.filter(m => !customMetrics.find(cm => cm.id === m.field.id))
+    const selectedCustomMetrics = customMetrics.filter(cm => mets.find(m => m.field.id === cm.id))
+
     // 检查是否启用数据汇总
     const dateFilters = Array.from(dimensionFilters.values()).filter(f => f.type === 'date')
     const shouldAggregate = dateFilters.some(f => (f.config as DateFilterConfig).aggregateData)
 
     let points: any[]
-    if (shouldAggregate && mets.length > 0) {
+    if (shouldAggregate && baseMetrics.length > 0) {
       // 数据汇总模式：忽略日期维度，保留其他维度进行分组聚合
       // 过滤掉日期类型的维度
       const nonDateDims = dims.filter(d => d.field.dataType !== 'date')
 
       if (nonDateDims.length === 0) {
-        // 如果没有非日期维度，对所有指标进行全局汇总
-        points = mets.map(met => {
+        // 如果没有非日期维度，对所有基础指标进行全局汇总
+        const aggregatedMetrics: Record<string, number> = {}
+
+        baseMetrics.forEach(met => {
           const metId = met.field.id
           const agg = met.aggregation || met.field.aggregation || 'sum'
           const values = filteredRows.map((r: any) => Number(r[metId])).filter((v: number) => !isNaN(v))
@@ -745,15 +762,86 @@ function App(){
             }
           }
 
-          return { name: met.field.name, value }
+          aggregatedMetrics[metId] = value
         })
+
+        // 计算自定义指标
+        selectedCustomMetrics.forEach(cm => {
+          aggregatedMetrics[cm.id] = evaluateFormula(cm.formula, aggregatedMetrics)
+        })
+
+        // 构建points数组
+        points = (baseMetrics.concat(selectedCustomMetrics.map(cm => ({ field: cm } as QueryField)))).map(met => ({
+          name: met.field.name,
+          value: aggregatedMetrics[met.field.id]
+        }))
       } else {
         // 有非日期维度，按非日期维度分组聚合（忽略日期维度）
-        points = runLocalQuery({ dataset, dimensions: nonDateDims, metrics: mets, rows: filteredRows }) as any[]
+        points = runLocalQuery({ dataset, dimensions: nonDateDims, metrics: baseMetrics, rows: filteredRows }) as any[]
+
+        // 为每个分组计算自定义指标
+        if (selectedCustomMetrics.length > 0 && typeof points[0] === 'object') {
+          points = points.map(point => {
+            const metricValues: Record<string, number> = {}
+
+            // 收集基础指标值
+            baseMetrics.forEach(met => {
+              const metId = met.field.id
+              metricValues[metId] = typeof point === 'object' && metId in point ? point[metId] : (point.value ?? 0)
+            })
+
+            // 计算自定义指标
+            const newPoint: any = { ...point }
+            selectedCustomMetrics.forEach(cm => {
+              newPoint[cm.id] = evaluateFormula(cm.formula, metricValues)
+            })
+
+            // 如果只有一个指标(自定义指标),更新value字段
+            if (mets.length === 1 && selectedCustomMetrics.length === 1) {
+              newPoint.value = newPoint[selectedCustomMetrics[0].id]
+            }
+
+            return newPoint
+          })
+        }
       }
     } else {
       // 正常模式：按所有维度分组
-      points = runLocalQuery({ dataset, dimensions: dims, metrics: mets, rows: filteredRows }) as any[]
+      if (baseMetrics.length > 0) {
+        points = runLocalQuery({ dataset, dimensions: dims, metrics: baseMetrics, rows: filteredRows }) as any[]
+
+        // 为每个分组计算自定义指标
+        if (selectedCustomMetrics.length > 0 && typeof points[0] === 'object') {
+          points = points.map(point => {
+            const metricValues: Record<string, number> = {}
+
+            // 收集基础指标值
+            baseMetrics.forEach(met => {
+              const metId = met.field.id
+              metricValues[metId] = typeof point === 'object' && metId in point ? point[metId] : (point.value ?? 0)
+            })
+
+            // 计算自定义指标
+            const newPoint: any = { ...point }
+            selectedCustomMetrics.forEach(cm => {
+              newPoint[cm.id] = evaluateFormula(cm.formula, metricValues)
+            })
+
+            // 如果只有一个指标(自定义指标),更新value字段
+            if (mets.length === 1 && selectedCustomMetrics.length === 1) {
+              newPoint.value = newPoint[selectedCustomMetrics[0].id]
+            }
+
+            return newPoint
+          })
+        }
+      } else if (selectedCustomMetrics.length > 0) {
+        // 只有自定义指标,没有基础指标
+        // 这种情况无法计算,返回空
+        points = []
+      } else {
+        points = []
+      }
     }
 
     // 构建图表数据
@@ -951,6 +1039,86 @@ function App(){
 
   function addDim(f:any){ if(!dims.find(d=>d.field.id===f.id)) setDims([...dims, { field:f } as QueryField ]) }
   function addMet(f:any){ if(!mets.find(m=>m.field.id===f.id)) setMets([...mets, { field:f, aggregation: (f.aggregation||'sum') as QueryField['aggregation'] } as QueryField ]) }
+
+  // 自定义指标相关函数
+  function openCustomMetricBuilder() {
+    setCustomMetricName('')
+    setFormulaNodes([])
+    setSelectedOperator('add')
+    setShowCustomMetricModal(true)
+  }
+
+  function addMetricToFormula(metric: Field) {
+    const node: FormulaNode = {
+      type: 'metric',
+      metricId: metric.id,
+      metricName: metric.name
+    }
+    setFormulaNodes([...formulaNodes, node])
+  }
+
+  function addNumberToFormula() {
+    const value = prompt('请输入数值:')
+    if (value !== null && !isNaN(Number(value))) {
+      const node: FormulaNode = {
+        type: 'number',
+        value: Number(value)
+      }
+      setFormulaNodes([...formulaNodes, node])
+    }
+  }
+
+  function createCustomMetric() {
+    if (!customMetricName.trim()) {
+      alert('请输入指标名称')
+      return
+    }
+
+    if (formulaNodes.length < 2) {
+      alert('公式至少需要两个元素')
+      return
+    }
+
+    // 构建公式树：从左到右组合所有节点
+    let formulaTree: FormulaNode = formulaNodes[0]
+    for (let i = 1; i < formulaNodes.length; i++) {
+      formulaTree = {
+        type: 'operation',
+        operator: selectedOperator,
+        left: formulaTree,
+        right: formulaNodes[i]
+      }
+    }
+
+    const customMetric: CustomMetricDefinition = {
+      id: uid('custom_metric'),
+      name: customMetricName.trim(),
+      formula: formulaTree,
+      dataType: 'number',
+      type: 'metric',
+      isCustom: true,
+      description: `自定义指标: ${formulaToString(formulaTree)}`
+    }
+
+    setCustomMetrics([...customMetrics, customMetric])
+
+    // 自动添加到已选指标
+    const field: Field = {
+      id: customMetric.id,
+      name: customMetric.name,
+      dataType: 'number',
+      type: 'metric',
+      description: customMetric.description
+    }
+    addMet(field)
+
+    setShowCustomMetricModal(false)
+    alert(`自定义指标 "${customMetric.name}" 创建成功！`)
+  }
+
+  function removeFormulaNode(index: number) {
+    setFormulaNodes(formulaNodes.filter((_, i) => i !== index))
+  }
 
   // 拖拽排序处理函数
   function handleDimDragStart(e: React.DragEvent, index: number) {
@@ -1232,7 +1400,14 @@ function App(){
       chartType,
       tags: [],
       order: Date.now(),
-      query: { dataset, dimensions: dims, metrics: mets, filters: [], config: {} },
+      query: {
+        dataset,
+        dimensions: dims,
+        metrics: mets,
+        customMetrics: customMetrics.length > 0 ? customMetrics : undefined,
+        filters: [],
+        config: {}
+      },
       config: {},
       previewImage,
     }
@@ -1311,7 +1486,25 @@ function App(){
                 </div>
               )}
             </div>
-            <h4>指标</h4>
+            <h4 style={{display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
+              <span>指标</span>
+              <button
+                onClick={openCustomMetricBuilder}
+                className='btn'
+                style={{
+                  fontSize: 12,
+                  padding: '4px 8px',
+                  background: '#52c41a',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+                title="创建自定义指标"
+              >
+                + 自定义指标
+              </button>
+            </h4>
             <input
               type="text"
               placeholder="搜索指标..."
@@ -1337,6 +1530,23 @@ function App(){
                 <div style={{padding: '8px', color: '#999', fontSize: 12, textAlign: 'center'}}>
                   未找到匹配的指标
                 </div>
+              )}
+              {/* 显示已创建的自定义指标 */}
+              {customMetrics.length > 0 && (
+                <>
+                  <h5 style={{marginTop: 12, marginBottom: 6, fontSize: 12, color: '#666'}}>自定义指标</h5>
+                  {customMetrics.map((cm) => (
+                    <div
+                      key={cm.id}
+                      className='field'
+                      onClick={()=>addMet(cm)}
+                      style={{background: '#f0f9ff', borderColor: '#91d5ff'}}
+                      title={cm.description}
+                    >
+                      ⚡ {cm.name}
+                    </div>
+                  ))}
+                </>
               )}
             </div>
           </div>
@@ -1672,6 +1882,254 @@ function App(){
           </div>
         </div>
       </div>
+
+      {/* 自定义指标构建器模态框 */}
+      {showCustomMetricModal && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999
+          }}
+          onClick={() => setShowCustomMetricModal(false)}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: '8px',
+              padding: '24px',
+              width: '600px',
+              maxWidth: '90%',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{margin: '0 0 16px 0', fontSize: 18}}>创建自定义指标</h3>
+
+            {/* 指标名称 */}
+            <div style={{marginBottom: 16}}>
+              <label style={{display: 'block', marginBottom: 6, fontSize: 14, fontWeight: 500}}>
+                指标名称:
+              </label>
+              <input
+                type="text"
+                value={customMetricName}
+                onChange={(e) => setCustomMetricName(e.target.value)}
+                placeholder="例如: 点击率"
+                style={{width: '100%', padding: '8px', fontSize: 14}}
+              />
+            </div>
+
+            {/* 运算符选择 */}
+            <div style={{marginBottom: 16}}>
+              <label style={{display: 'block', marginBottom: 6, fontSize: 14, fontWeight: 500}}>
+                运算符:
+              </label>
+              <div style={{display: 'flex', gap: 8}}>
+                {[
+                  {value: 'add', label: '加 (+)', icon: '+'},
+                  {value: 'subtract', label: '减 (-)', icon: '-'},
+                  {value: 'multiply', label: '乘 (×)', icon: '×'},
+                  {value: 'divide', label: '除 (÷)', icon: '÷'}
+                ].map(op => (
+                  <button
+                    key={op.value}
+                    onClick={() => setSelectedOperator(op.value as OperatorType)}
+                    style={{
+                      flex: 1,
+                      padding: '8px',
+                      fontSize: 14,
+                      border: selectedOperator === op.value ? '2px solid #1890ff' : '1px solid #d9d9d9',
+                      background: selectedOperator === op.value ? '#e6f7ff' : '#fff',
+                      borderRadius: '4px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {op.icon}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 公式构建区域 */}
+            <div style={{marginBottom: 16}}>
+              <label style={{display: 'block', marginBottom: 6, fontSize: 14, fontWeight: 500}}>
+                公式元素:
+              </label>
+              <div style={{
+                minHeight: 60,
+                padding: 12,
+                border: '1px solid #d9d9d9',
+                borderRadius: '4px',
+                background: '#fafafa',
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 8,
+                alignItems: 'center'
+              }}>
+                {formulaNodes.length === 0 ? (
+                  <span style={{color: '#999', fontSize: 13}}>请添加指标或数值</span>
+                ) : (
+                  formulaNodes.map((node, index) => (
+                    <div key={index} style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4
+                    }}>
+                      <span style={{
+                        padding: '4px 12px',
+                        background: node.type === 'metric' ? '#1890ff' : '#52c41a',
+                        color: '#fff',
+                        borderRadius: '12px',
+                        fontSize: 13
+                      }}>
+                        {node.type === 'metric' ? node.metricName : node.type === 'number' ? node.value : ''}
+                      </span>
+                      <button
+                        onClick={() => removeFormulaNode(index)}
+                        style={{
+                          background: '#ff4d4f',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '50%',
+                          width: 20,
+                          height: 20,
+                          cursor: 'pointer',
+                          fontSize: 12
+                        }}
+                      >
+                        ×
+                      </button>
+                      {index < formulaNodes.length - 1 && (
+                        <span style={{color: '#666', fontSize: 14, margin: '0 4px'}}>
+                          {selectedOperator === 'add' ? '+' : selectedOperator === 'subtract' ? '-' : selectedOperator === 'multiply' ? '×' : '÷'}
+                        </span>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* 可用指标列表 */}
+            <div style={{marginBottom: 16}}>
+              <label style={{display: 'block', marginBottom: 6, fontSize: 14, fontWeight: 500}}>
+                可用指标 (点击添加):
+              </label>
+              <div style={{
+                maxHeight: 200,
+                overflow: 'auto',
+                border: '1px solid #d9d9d9',
+                borderRadius: '4px',
+                padding: 8
+              }}>
+                {currentDatasetFields.metrics.map((metric: Field) => (
+                  <div
+                    key={metric.id}
+                    onClick={() => addMetricToFormula(metric)}
+                    style={{
+                      padding: '6px 8px',
+                      cursor: 'pointer',
+                      borderRadius: '4px',
+                      fontSize: 13,
+                      marginBottom: 4,
+                      background: '#fff',
+                      border: '1px solid #e0e0e0'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = '#f0f0f0'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
+                  >
+                    {metric.name} ({metric.id})
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 添加数值按钮 */}
+            <div style={{marginBottom: 16}}>
+              <button
+                onClick={addNumberToFormula}
+                style={{
+                  padding: '8px 16px',
+                  background: '#52c41a',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: 14
+                }}
+              >
+                + 添加数值
+              </button>
+            </div>
+
+            {/* 公式预览 */}
+            {formulaNodes.length > 0 && (
+              <div style={{
+                marginBottom: 16,
+                padding: 12,
+                background: '#f0f9ff',
+                border: '1px solid #91d5ff',
+                borderRadius: '4px'
+              }}>
+                <strong style={{fontSize: 13, color: '#1890ff'}}>公式预览:</strong>
+                <div style={{marginTop: 6, fontSize: 14, color: '#333'}}>
+                  {formulaNodes.map((node, index) => (
+                    <span key={index}>
+                      {node.type === 'metric' ? node.metricName : node.type === 'number' ? node.value : ''}
+                      {index < formulaNodes.length - 1 && (
+                        <span style={{margin: '0 4px', color: '#1890ff'}}>
+                          {selectedOperator === 'add' ? '+' : selectedOperator === 'subtract' ? '-' : selectedOperator === 'multiply' ? '×' : '÷'}
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 操作按钮 */}
+            <div style={{display: 'flex', gap: 12, justifyContent: 'flex-end'}}>
+              <button
+                onClick={() => setShowCustomMetricModal(false)}
+                style={{
+                  padding: '8px 20px',
+                  background: '#fff',
+                  border: '1px solid #d9d9d9',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: 14
+                }}
+              >
+                取消
+              </button>
+              <button
+                onClick={createCustomMetric}
+                style={{
+                  padding: '8px 20px',
+                  background: '#1890ff',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: 14
+                }}
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

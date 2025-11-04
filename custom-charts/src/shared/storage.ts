@@ -15,10 +15,30 @@ export type Field = {
 
 export type QueryField = { field: Field; aggregation?: Field['aggregation'] }
 
+// 自定义指标公式节点类型
+export type OperatorType = 'add' | 'subtract' | 'multiply' | 'divide'
+
+export type FormulaNode =
+  | { type: 'metric'; metricId: string; metricName: string }
+  | { type: 'number'; value: number }
+  | { type: 'operation'; operator: OperatorType; left: FormulaNode; right: FormulaNode }
+
+// 自定义指标定义
+export type CustomMetricDefinition = {
+  id: string
+  name: string
+  formula: FormulaNode
+  dataType: 'number'
+  type: 'metric'
+  isCustom: true
+  description?: string
+}
+
 export type Query = {
   dataset: string
   dimensions: QueryField[]
   metrics: QueryField[]
+  customMetrics?: CustomMetricDefinition[]  // 自定义指标
   filters: any[]
   config: any
 }
@@ -584,6 +604,50 @@ export function getAllDatasets(){
 export function getDatasetById(id: string){
   const datasets = storage.load<any[]>(STORAGE_KEYS.DATASETS, [])
   return datasets.find(d=>d.id===id)
+}
+
+// 计算自定义指标的公式
+export function evaluateFormula(node: FormulaNode, metricValues: Record<string, number>): number {
+  switch (node.type) {
+    case 'metric':
+      return metricValues[node.metricId] ?? 0
+    case 'number':
+      return node.value
+    case 'operation':
+      const left = evaluateFormula(node.left, metricValues)
+      const right = evaluateFormula(node.right, metricValues)
+      switch (node.operator) {
+        case 'add': return left + right
+        case 'subtract': return left - right
+        case 'multiply': return left * right
+        case 'divide': return right !== 0 ? left / right : 0
+        default: return 0
+      }
+    default:
+      return 0
+  }
+}
+
+// 将公式节点转换为可读字符串
+export function formulaToString(node: FormulaNode): string {
+  switch (node.type) {
+    case 'metric':
+      return node.metricName
+    case 'number':
+      return String(node.value)
+    case 'operation':
+      const left = formulaToString(node.left)
+      const right = formulaToString(node.right)
+      const opSymbol = {
+        add: '+',
+        subtract: '-',
+        multiply: '×',
+        divide: '÷'
+      }[node.operator]
+      return `(${left} ${opSymbol} ${right})`
+    default:
+      return ''
+  }
 }
 
 export function runLocalQuery({ dataset, dimensions, metrics, rows: inputRows }: {dataset:string; dimensions:QueryField[]; metrics:QueryField[]; rows?: any[]}){
