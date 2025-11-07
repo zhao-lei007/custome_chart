@@ -63,7 +63,7 @@ function App(){
             window.location.href = '/editor.html';
           }
         }}>创建图表</button>
-        <input className='search' placeholder='搜索图表名称…' value={q} onChange={e=>setQ(e.target.value)} />
+        <input className='search' placeholder='搜索图表名称/业务名称/标签' value={q} onChange={e=>setQ(e.target.value)} />
         <select className='btn' value={type} onChange={e=>setType(e.target.value)}>
           <option value=''>图表类型</option>
           {['table','bar','line','pie','scatter','heatmap','area','radar'].map(t=> <option key={t} value={t}>{t}</option>)}
@@ -72,6 +72,11 @@ function App(){
           <option value='updatedAt'>按修改时间</option>
           <option value='createdAt'>按创建时间</option>
         </select>
+        <button
+          className='btn'
+          title='复用快捷查询的标签管理功能'
+          onClick={(e)=> {e.preventDefault(); /* TODO: 实现标签管理功能 */}}
+        >标签管理</button>
       </div>
       <div className='grid'>
         {filtered.map(c=> (
@@ -93,8 +98,20 @@ function App(){
               <div className='row' style={{marginTop: 4}}>
                 <strong style={{fontSize: 13}}>{c.name||'(未命名)'}</strong>
                 <div>
-                  <button className='btn' style={{padding: '4px 8px', fontSize: 12}} onClick={(e)=> {e.stopPropagation(); openEditor(c.id)}}>修改</button>{' '}
-                  <button className='btn' style={{padding: '4px 8px', fontSize: 12}} onClick={(e)=> {e.stopPropagation(); onDelete(c.id)}}>删除</button>
+                  <button
+                    className='btn primary'
+                    style={{padding: '4px 8px', fontSize: 12}}
+                    title='点击后出现的业务复制原有的所有配置信息，但是不能修改数据集'
+                    onClick={(e)=> {e.stopPropagation(); /* TODO: 实现克隆功能 */}}
+                  >克隆</button>{' '}
+                  <button
+                    className='btn primary'
+                    style={{padding: '4px 8px', fontSize: 12}}
+                    title='导出当前已配置图表的默认加载有效期数据'
+                    onClick={(e)=> {e.stopPropagation(); /* TODO: 实现导出功能 */}}
+                  >导出</button>{' '}
+                  <button className='btn primary' style={{padding: '4px 8px', fontSize: 12}} onClick={(e)=> {e.stopPropagation(); openEditor(c.id)}}>修改</button>{' '}
+                  <button className='btn primary' style={{padding: '4px 8px', fontSize: 12}} onClick={(e)=> {e.stopPropagation(); onDelete(c.id)}}>删除</button>
                 </div>
               </div>
               <div className='meta'>{c.chartType||'bar'} · {c.publishStatus||'draft'}</div>
