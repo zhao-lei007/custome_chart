@@ -93,6 +93,18 @@ function App(){
               <div className='row' style={{marginTop: 4}}>
                 <strong style={{fontSize: 13}}>{c.name||'(未命名)'}</strong>
                 <div>
+                  <button
+                    className='btn'
+                    style={{padding: '4px 8px', fontSize: 12}}
+                    title="点击后出现的业务复制原有的所有配置信息，但是不能修改数据集"
+                    onClick={(e)=> {e.stopPropagation(); /* TODO: 实现克隆功能 */}}
+                  >克隆</button>{' '}
+                  <button
+                    className='btn'
+                    style={{padding: '4px 8px', fontSize: 12}}
+                    title="导出当前已配置图表的默认加载有效期数据"
+                    onClick={(e)=> {e.stopPropagation(); /* TODO: 实现导出功能 */}}
+                  >导出</button>{' '}
                   <button className='btn' style={{padding: '4px 8px', fontSize: 12}} onClick={(e)=> {e.stopPropagation(); openEditor(c.id)}}>修改</button>{' '}
                   <button className='btn' style={{padding: '4px 8px', fontSize: 12}} onClick={(e)=> {e.stopPropagation(); onDelete(c.id)}}>删除</button>
                 </div>
