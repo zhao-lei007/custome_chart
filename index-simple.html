@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DataEase Custom Chart - 数据可视化演示</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+        }
+
+        .header {
+            background: #fff;
+            border-bottom: 1px solid #e5e5e5;
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+            margin: 0;
+        }
+
+        .nav {
+            display: flex;
+            gap: 8px;
+        }
+
+        .nav-btn {
+            padding: 6px 16px;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            background: #fff;
+            color: #333;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+
+        .nav-btn:hover {
+            color: #0077FF;
+            border-color: #0077FF;
+        }
+
+        .nav-btn.active {
+            background: #0077FF;
+            color: #fff;
+            border-color: #0077FF;
+        }
+
+        .container {
+            width: 100%;
+            height: calc(100vh - 50px);
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: none;
+        }
+
+        iframe.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 DataEase Custom Chart - 数据可视化演示</h1>
+        <div class="nav">
+            <button class="nav-btn active" onclick="switchPage('manage')">图表管理</button>
+            <button class="nav-btn" onclick="switchPage('editor')">创建图表</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <iframe id="manage-frame" class="active" src="./manage.html"></iframe>
+        <iframe id="editor-frame" src="./editor.html"></iframe>
+    </div>
+
+    <script>
+        let currentPage = 'manage';
+
+        function switchPage(page) {
+            // Update buttons
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update iframes
+            document.querySelectorAll('iframe').forEach(frame => {
+                frame.classList.remove('active');
+            });
+            document.getElementById(page + '-frame').classList.add('active');
+
+            currentPage = page;
+        }
+
+        // Listen to messages from iframes
+        window.addEventListener('message', (e) => {
+            if (e.data.type === 'OPEN_CUSTOM_CHARTS') {
+                const page = e.data.which || 'manage';
+                const targetBtn = page === 'manage' ?
+                    document.querySelectorAll('.nav-btn')[0] :
+                    document.querySelectorAll('.nav-btn')[1];
+                targetBtn.click();
+
+                // Pass chart ID if provided
+                if (e.data.chartId && page === 'editor') {
+                    const editorFrame = document.getElementById('editor-frame');
+                    editorFrame.src = './editor.html?id=' + e.data.chartId;
+                }
+            }
+        });
+    </script>
+</body>
+</html>
